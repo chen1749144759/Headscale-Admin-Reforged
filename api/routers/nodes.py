@@ -1,0 +1,154 @@
+"""
+节点路由模块
+处理节点相关的增删改查、注册、重命名等
+"""
+import json
+
+import psycopg2
+import psycopg2.extras
+from fastapi import APIRouter, Depends, HTTPException
+
+from .dependencies import CurrentUser, get_current_user, require_manager, get_db_conn, record_log
+from .utils import hs_request
+
+router = APIRouter(prefix="/api/nodes", tags=["节点"])
+
+@router.get('')
+def list_nodes(user: CurrentUser = Depends(get_current_user)):
+    """获取节点列表"""
+    result = hs_request('GET', '/api/v1/node')
+    return result
+
+@router.post('/register')
+def register_node(registration_id: str, user: CurrentUser = Depends(get_current_user)):
+    """使用 registrationID 注册节点"""
+    # 检查当前用户节点数量是否超过限制
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT COUNT(*) as count FROM nodes WHERE user_id = %s", (user.id,))
+        node_count = cur.fetchone()['count']
+        
+        cur.execute("SELECT node FROM users WHERE id = %s", (user.id,))
+        user_result = cur.fetchone()
+        user_node_limit = user_result['node'] if user_result else 0
+        
+        if int(node_count) >= int(user_node_limit):
+            raise HTTPException(400, '超过此用户节点限制')
+    finally:
+        conn.close()
+    
+    # 调用 headscale API 注册节点
+    url_path = f'/api/v1/node/register?user={user.name}&key={registration_id}'
+    result = hs_request('POST', url_path)
+    
+    if result.get('code') == 0:
+        conn = get_db_conn()
+        try:
+            record_log(conn, user.id, '节点注册成功')
+            conn.commit()
+        finally:
+            conn.close()
+        return {'code': 0, 'msg': '节点添加成功', 'data': result.get('data')}
+    else:
+        raise HTTPException(400, result.get('msg', '节点注册失败'))
+
+@router.delete('/{node_id}')
+def delete_node(node_id: str, user: CurrentUser = Depends(get_current_user)):
+    """删除节点"""
+    result = hs_request('DELETE', f'/api/v1/node/{node_id}')
+    conn = get_db_conn()
+    try:
+        record_log(conn, user.id, f'删除节点 {node_id}')
+        conn.commit()
+    finally:
+        conn.close()
+    return result
+
+@router.post('/{node_id}/expire')
+def expire_node(node_id: str, user: CurrentUser = Depends(get_current_user)):
+    """过期节点"""
+    result = hs_request('POST', f'/api/v1/node/{node_id}/expire')
+    conn = get_db_conn()
+    try:
+        record_log(conn, user.id, f'过期节点 {node_id}')
+        conn.commit()
+    finally:
+        conn.close()
+    return result
+
+@router.post('/{node_id}/rename')
+def rename_node(node_id: str, name: str, user: CurrentUser = Depends(get_current_user)):
+    """节点重命名"""
+    if not name:
+        raise HTTPException(400, '节点名称不能为空')
+    
+    result = hs_request('POST', f'/api/v1/node/{node_id}/rename/{name}')
+    conn = get_db_conn()
+    try:
+        record_log(conn, user.id, f'重命名节点 {node_id} 为 {name}')
+        conn.commit()
+    finally:
+        conn.close()
+    return result
+
+@router.get('/{node_id}/info')
+def get_node_info(node_id: str, user: CurrentUser = Depends(get_current_user)):
+    """获取节点详细信息（从数据库）"""
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        base_query = """
+            SELECT n.host_info, n.user_id
+            FROM nodes n
+            JOIN users u ON n.user_id = u.id
+            WHERE n.id = %s
+        """
+        params = [node_id]
+        
+        # 非管理员只能查看自己的节点
+        if not user.is_manager():
+            base_query += " AND n.user_id = %s"
+            params.append(user.id)
+        
+        cur.execute(base_query, params)
+        node = cur.fetchone()
+        
+        if not node:
+            raise HTTPException(404, f'未找到ID为 {node_id} 的节点，或您没有权限查看')
+        
+        host_info = json.loads(node['host_info']) if node['host_info'] else {}
+        
+        return {
+            'code': 0,
+            'data': {
+                'OS': (host_info.get('OS') or '') + (host_info.get('OSVersion') or ''),
+                'Client': host_info.get('IPNVersion') or '',
+                'user_id': node['user_id'],
+            }
+        }
+    finally:
+        conn.close()
+
+@router.get('/{node_id}/routes')
+def get_node_routes(node_id: str, user: CurrentUser = Depends(get_current_user)):
+    """获取节点路由"""
+    result = hs_request('GET', f'/api/v1/node/{node_id}/routes')
+    return result
+
+@router.post('/{node_id}/approve-routes')
+def approve_routes(node_id: str, routes: list, user: CurrentUser = Depends(get_current_user)):
+    """批准路由（需要用户开启路由权限）"""
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT route FROM users WHERE id = %s", (user.id,))
+        row = cur.fetchone()
+        
+        if not row or row['route'] == 0:
+            raise HTTPException(403, '你当前无此权限！请联系管理员')
+    finally:
+        conn.close()
+    
+    result = hs_request('POST', f'/api/v1/node/{node_id}/approve_routes', {'routes': routes})
+    return result

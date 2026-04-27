@@ -1,0 +1,13 @@
+[Unit]
+Description=Headscale Custom (Admin-Pro)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/headscale-custom --config /etc/headscale-custom/config.yaml serve
+Restart=on-failure
+RestartSec=5
+Environment=HEADSCALE_CONFIG=/etc/headscale-custom/config.yaml
+
+[Install]
+WantedBy=multi-user.target

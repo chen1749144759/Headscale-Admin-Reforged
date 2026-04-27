@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Headscale Admin</title>
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/element-plus/2.9.1/index.min.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<div id="app">
+  <!-- ═══ 登录页 ═══ -->
+  <div v-if="!isLoggedIn" class="login-page">
+    <div class="login-card">
+      <div class="login-brand">
+        <h1>Headscale Admin</h1>
+        <p>WireGuard 网络管理平台</p>
+      </div>
+      <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef" label-position="top" size="large">
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="loginForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" show-password @keyup.enter="handleLogin" />
+        </el-form-item>
+        <el-form-item>
+          <div class="slider-verify">
+            <div class="slider-track" @mousedown="sliderStart" @touchstart="sliderStart">
+              <div class="slider-fill" :style="{ width: sliderLeft + 'px' }"></div>
+              <div class="slider-thumb" :style="{ left: sliderLeft + 'px' }">
+                <span v-if="!sliderVerified">>></span>
+                <span v-else>✓</span>
+              </div>
+              <span class="slider-text">{{ sliderVerified ? '验证通过' : '请拖动滑块完成验证' }}</span>
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="loginLoading" @click="handleLogin" style="width:100%">登 录</el-button>
+        </el-form-item>
+        <div v-if="openReg" style="text-align:center">
+          <el-link type="primary" @click="showRegister=true">没有账户？立即注册</el-link>
+        </div>
+      </el-form>
+    </div>
+
+    <!-- 注册对话框 -->
+    <el-dialog v-model="showRegister" title="注册新用户" width="420px" :close-on-click-modal="false">
+      <el-form :model="regForm" :rules="regRules" ref="regFormRef" label-position="top" size="large">
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="regForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="regForm.password" type="password" placeholder="请输入密码" show-password />
+        </el-form-item>
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input v-model="regForm.confirmPassword" type="password" placeholder="请再次输入密码" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showRegister=false">取消</el-button>
+        <el-button type="primary" :loading="regLoading" @click="handleRegister">注 册</el-button>
+      </template>
+    </el-dialog>
+  </div>
+
+  <!-- ═══ 主界面 ═══ -->
+  <div v-else class="admin-layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar" :class="{'is-collapsed': sidebarCollapsed}">
+      <div class="sidebar-logo">
+        <span v-show="!sidebarCollapsed" class="logo-text">Headscale Admin</span>
+      </div>
+      <nav class="sidebar-nav">
+        <template v-for="group in menuGroups" :key="group.label">
+          <div v-show="!sidebarCollapsed" class="nav-label">{{ group.label }}</div>
+          <div v-for="item in group.items" :key="item.key"
+               class="nav-item" :class="{'is-active': currentPage===item.key}"
+               @click="navigateTo(item.key)"
+               :title="item.label">
+            <span class="nav-icon" v-html="item.icon"></span>
+            <span v-show="!sidebarCollapsed" class="nav-label-text">{{ item.label }}</span>
+          </div>
+        </template>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-avatar">{{ currentUser.name?.charAt(0).toUpperCase() }}</div>
+        <div v-show="!sidebarCollapsed">
+          <div class="user-name">{{ currentUser.name }}</div>
+          <div class="user-role">{{ currentUser.role === 'manager' ? '管理员' : '用户' }}</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 主区域 -->
+    <main class="main-area">
+      <header class="main-header">
+        <div class="header-left">
+          <button class="collapse-btn" @click="sidebarCollapsed=!sidebarCollapsed" :title="sidebarCollapsed?'展开':'收起'">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline v-if="!sidebarCollapsed" points="11 17 6 12 11 7"/><polyline v-else points="13 17 18 12 13 7"/></svg>
+          </button>
+          <span class="breadcrumb">Headscale / {{ currentPageTitle }}</span>
+        </div>
+        <div class="header-right">
+          <el-button text @click="refreshPage">刷新</el-button>
+          <el-dropdown trigger="click" @command="handleUserCommand">
+            <span class="user-dropdown">
+              {{ currentUser.name }}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">基本资料</el-dropdown-item>
+                <el-dropdown-item command="password">修改密码</el-dropdown-item>
+                <el-dropdown-item divided command="logout" style="color:#ef4444">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </header>
+
+      <!-- 内容区 -->
+      <div class="main-content">
+        <!-- 未配置 Headscale 提示 -->
+        <div v-if="!systemStatus.headscale_healthy && currentPage!=='settings'" class="hs-warning">
+          <el-alert title="Headscale 未连接" type="warning" :closable="false" show-icon>
+            <template #default>
+              <p>Headscale 服务未运行或未正确配置，部分功能不可用。</p>
+              <el-button type="warning" size="small" @click="navigateTo('settings')" style="margin-top:8px">前往系统设置</el-button>
+            </template>
+          </el-alert>
+        </div>
+
+        <!-- ── 控制台 ── -->
+        <div v-if="currentPage==='console'">
+          <h2>控制台</h2>
+          <el-row :gutter="16" style="margin-top:16px">
+            <el-col :span="6"><el-card shadow="hover"><el-statistic title="CPU 使用率" :value="sysInfo.cpu_usage||0" suffix="%" /></el-card></el-col>
+            <el-col :span="6"><el-card shadow="hover"><el-statistic title="内存使用率" :value="sysInfo.memory_percent||0" suffix="%" /></el-card></el-col>
+            <el-col :span="6"><el-card shadow="hover"><el-statistic title="Headscale" :value="systemStatus.headscale_healthy?'运行中':'已停止'" /></el-card></el-col>
+            <el-col :span="6"><el-card shadow="hover"><el-statistic title="版本" :value="systemStatus.headscale_version||'-'" /></el-card></el-col>
+          </el-row>
+        </div>
+
+        <!-- ── 节点管理 ── -->
+        <div v-if="currentPage==='nodes'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h2>节点管理</h2>
+            <el-button type="primary" @click="loadNodes" :loading="nodesLoading">刷新</el-button>
+          </div>
+          <el-table :data="nodesList" v-loading="nodesLoading" border stripe style="width: 100%" :default-sort="{prop: 'id', order: 'descending'}">
+            <el-table-column prop="id" label="ID" width="70" align="center" sortable />
+            <el-table-column prop="name" label="名称" width="160" show-overflow-tooltip />
+            <el-table-column prop="user.name" label="用户" width="120" show-overflow-tooltip />
+            <el-table-column prop="ipAddresses" label="IP 地址" min-width="180" show-overflow-tooltip>
+              <template #default="{row}">{{ (row.ipAddresses||[]).join(', ') }}</template>
+            </el-table-column>
+            <el-table-column prop="os" label="系统" width="120" show-overflow-tooltip />
+            <el-table-column prop="online" label="状态" width="80" align="center">
+              <template #default="{row}"><el-tag :type="row.online?'success':'info'" size="small">{{ row.online?'在线':'离线' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column prop="expiry" label="过期时间" width="180" sortable>
+              <template #default="{row}">{{ row.expiry ? new Date(row.expiry*1000).toLocaleString() : '永不过期' }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="180" fixed="right" align="center">
+              <template #default="{row}">
+                <el-button size="small" type="warning" @click="expireNode(row.id)">过期</el-button>
+                <el-popconfirm title="确定删除此节点？" @confirm="deleteNode(row.id)">
+                  <template #reference><el-button size="small" type="danger">删除</el-button></template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- ── 用户管理 ── -->
+        <div v-if="currentPage==='users'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h2>用户管理 <el-tag size="small" type="info">用户 = 设备分组</el-tag></h2>
+            <el-button @click="loadUsers" :loading="usersLoading">刷新</el-button>
+          </div>
+          <el-table :data="usersList" v-loading="usersLoading" border stripe style="width: 100%" :default-sort="{prop: 'id', order: 'ascending'}">
+            <el-table-column prop="id" label="ID" width="60" align="center" sortable />
+            <el-table-column prop="name" label="用户名" width="140" show-overflow-tooltip />
+            <el-table-column prop="role" label="角色" width="90" align="center">
+              <template #default="{row}"><el-tag :type="row.role==='manager'?'danger':'info'" size="small">{{ row.role==='manager'?'管理员':'用户' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column prop="node" label="节点配额" width="100" align="center" />
+            <el-table-column prop="route" label="路由" width="80" align="center">
+              <template #default="{row}"><el-switch :model-value="row.route===1" @change="toggleUserRoute(row)" size="small" /></template>
+            </el-table-column>
+            <el-table-column prop="enable" label="启用" width="80" align="center">
+              <template #default="{row}"><el-switch :model-value="row.enable===1" @change="toggleUserEnable(row)" size="small" /></template>
+            </el-table-column>
+            <el-table-column prop="expire" label="过期时间" width="180" show-overflow-tooltip sortable />
+            <el-table-column prop="created_at" label="创建时间" width="180" show-overflow-tooltip sortable />
+            <el-table-column label="操作" width="100" fixed="right" align="center">
+              <template #default="{row}">
+                <el-popconfirm v-if="row.role!=='manager'" title="确定删除？" @confirm="deleteUser(row.id)">
+                  <template #reference><el-button size="small" type="danger">删除</el-button></template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- ── 路由管理 ── -->
+        <div v-if="currentPage==='routes'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h2>路由管理</h2>
+            <el-button @click="loadRoutes" :loading="routesLoading">刷新</el-button>
+          </div>
+          <el-table :data="routesList" v-loading="routesLoading" border stripe style="width: 100%" :default-sort="{prop: 'id', order: 'ascending'}">
+            <el-table-column prop="id" label="ID" width="80" align="center" sortable />
+            <el-table-column prop="node.name" label="节点" width="160" show-overflow-tooltip />
+            <el-table-column prop="prefix" label="网段" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="advertised" label="已通告" width="90" align="center">
+              <template #default="{row}"><el-tag :type="row.advertised?'success':'info'" size="small">{{ row.advertised?'是':'否' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column prop="enabled" label="已启用" width="90" align="center">
+              <template #default="{row}"><el-tag :type="row.enabled?'success':'info'" size="small">{{ row.enabled?'是':'否' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="操作" width="120" fixed="right" align="center">
+              <template #default="{row}">
+                <el-button v-if="!row.enabled" size="small" type="primary" @click="toggleRoute(row.id, true)">启用</el-button>
+                <el-button v-else size="small" type="warning" @click="toggleRoute(row.id, false)">禁用</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- ── ACL 规则 ── -->
+        <div v-if="currentPage==='acl'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h2>ACL 规则</h2>
+            <el-button type="primary" @click="saveAcl" :loading="aclSaving">保存</el-button>
+          </div>
+          <el-input v-model="aclContent" type="textarea" :rows="20" style="font-family:monospace" placeholder="请输入 ACL 规则（JSON 格式）" />
+        </div>
+
+        <!-- ── 预认证密钥 ── -->
+        <div v-if="currentPage==='preauthkeys'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h2>预认证密钥</h2>
+            <el-button type="primary" @click="createKey">创建密钥</el-button>
+          </div>
+          <el-table :data="preauthkeysList" v-loading="keysLoading" border stripe style="width: 100%">
+            <el-table-column prop="id" label="ID" width="80" align="center" />
+            <el-table-column prop="key" label="密钥" min-width="300" show-overflow-tooltip>
+              <template #default="{row}"><code style="font-size:12px">{{ row.key }}</code></template>
+            </el-table-column>
+            <el-table-column prop="reusable" label="可复用" width="90" align="center">
+              <template #default="{row}"><el-tag :type="row.reusable?'warning':'info'" size="small">{{ row.reusable?'是':'否' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column prop="ephemeral" label="临时" width="90" align="center">
+              <template #default="{row}"><el-tag :type="row.ephemeral?'warning':'info'" size="small">{{ row.ephemeral?'是':'否' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column prop="expiration" label="过期时间" width="180" show-overflow-tooltip>
+              <template #default="{row}">{{ row.expiration ? new Date(row.expiration).toLocaleString() : '永不过期' }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- ── 系统设置 ── -->
+        <div v-if="currentPage==='settings'">
+          <h2>系统设置</h2>
+          <el-form :model="settingsForm" label-width="140px" style="max-width:600px;margin-top:16px" size="large">
+            <el-form-item label="Headscale 状态">
+              <el-tag :type="systemStatus.headscale_running?'success':'danger'">
+                {{ systemStatus.headscale_running?'运行中':'已停止' }}
+              </el-tag>
+              <el-button v-if="!systemStatus.headscale_running" type="success" size="small" style="margin-left:12px" @click="switchHeadscale('start')">启动</el-button>
+              <el-button v-else type="danger" size="small" style="margin-left:12px" @click="switchHeadscale('stop')">停止</el-button>
+              <span style="margin-left:12px;color:#999;font-size:12px">{{ systemStatus.headscale_version }}</span>
+            </el-form-item>
+            <el-form-item label="服务器地址">
+              <el-input v-model="settingsForm.server_url" placeholder="http://127.0.0.1:8080" />
+            </el-form-item>
+            <el-form-item label="监听网卡">
+              <el-select v-model="settingsForm.server_net" placeholder="选择网卡">
+                <el-option v-for="iface in settingsForm.network_interfaces" :key="iface" :label="iface" :value="iface" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="API Key">
+              <el-input v-model="settingsForm.bearer_token_display" readonly>
+                <template #append><el-button @click="refreshApiKey">刷新 Key</el-button></template>
+              </el-input>
+            </el-form-item>
+            <el-form-item label="默认注册天数">
+              <el-input-number v-model="settingsForm.default_reg_days" :min="1" :max="365" />
+            </el-form-item>
+            <el-form-item label="默认节点配额">
+              <el-input-number v-model="settingsForm.default_node_count" :min="1" :max="100" />
+            </el-form-item>
+            <el-form-item label="开放注册">
+              <el-switch v-model="settingsForm.open_user_reg_bool" active-value="on" inactive-value="off" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="saveSettings" :loading="settingsSaving">保存设置</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- ── 操作日志 ── -->
+        <div v-if="currentPage==='logs'">
+          <h2>操作日志</h2>
+          <el-table :data="logsList" v-loading="logsLoading" border stripe style="width: 100%;margin-top:16px" :default-sort="{prop: 'id', order: 'descending'}">
+            <el-table-column prop="id" label="ID" width="70" align="center" sortable />
+            <el-table-column prop="user_name" label="用户" width="120" show-overflow-tooltip />
+            <el-table-column prop="content" label="操作内容" min-width="300" show-overflow-tooltip />
+            <el-table-column prop="created_at" label="时间" width="180" sortable />
+          </el-table>
+          <el-pagination v-if="logsTotal>0" layout="prev, pager, next" :total="logsTotal" :page-size="20"
+                         v-model:current-page="logsPage" @current-change="loadLogs" style="margin-top:16px;justify-content:center" />
+        </div>
+
+        <!-- ── 个人资料 ── -->
+        <div v-if="currentPage==='profile'">
+          <h2>基本资料</h2>
+          <el-form :model="profileForm" label-width="100px" style="max-width:500px;margin-top:16px" size="large">
+            <el-form-item label="用户名"><el-input :model-value="currentUser.name" disabled /></el-form-item>
+            <el-form-item label="角色"><el-tag>{{ currentUser.role==='manager'?'管理员':'用户' }}</el-tag></el-form-item>
+            <el-form-item label="邮箱"><el-input v-model="profileForm.email" placeholder="选填" /></el-form-item>
+            <el-form-item label="手机"><el-input v-model="profileForm.cellphone" placeholder="选填" /></el-form-item>
+            <el-form-item><el-button type="primary" @click="saveProfile">保存</el-button></el-form-item>
+          </el-form>
+        </div>
+
+        <!-- ── 修改密码 ── -->
+        <div v-if="currentPage==='password'">
+          <h2>修改密码</h2>
+          <el-form :model="pwdForm" :rules="pwdRules" ref="pwdFormRef" label-width="100px" style="max-width:500px;margin-top:16px" size="large">
+            <el-form-item label="原密码" prop="old_password"><el-input v-model="pwdForm.old_password" type="password" show-password /></el-form-item>
+            <el-form-item label="新密码" prop="new_password"><el-input v-model="pwdForm.new_password" type="password" show-password /></el-form-item>
+            <el-form-item><el-button type="primary" @click="changePassword" :loading="pwdLoading">修改密码</el-button></el-form-item>
+          </el-form>
+        </div>
+
+        <!-- ── 部署帮助 ── -->
+        <div v-if="currentPage==='deploy'">
+          <h2>部署帮助</h2>
+          <el-card style="margin-top:16px">
+            <h3>客户端注册命令</h3>
+            <p>在客户端设备上执行：</p>
+            <el-input :model-value="deployCmd" readonly type="textarea" :rows="3" style="margin-top:8px" />
+            <el-button size="small" style="margin-top:8px" @click="copyText(deployCmd)">复制</el-button>
+          </el-card>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.bootcdn.net/ajax/libs/vue/3.5.13/vue.global.prod.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/element-plus/2.9.1/index.full.min.js"></script>
+<script src="/static/css/app.js"></script>
+</body>
+</html>

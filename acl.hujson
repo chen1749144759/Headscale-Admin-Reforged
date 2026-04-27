@@ -1,0 +1,10 @@
+// Headscale-Admin-Pro 自定义 ACL 规则
+{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["*"],
+      "dst": ["*:*"]
+    }
+  ]
+}

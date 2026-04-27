@@ -1,0 +1,44 @@
+server_url: http://127.0.0.1:18557
+listen_addr: 0.0.0.0:18557
+grpc_listen_addr: 127.0.0.1:50444
+grpc_allow_insecure: false
+
+noise:
+  private_key_path: /var/lib/headscale-custom/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: "local"
+    region_name: "Local DERP"
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  paths: []
+
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale-custom/db.sqlite
+    write_ahead_log: true
+
+dns:
+  base_domain: hs.admin.pro
+  override_local_dns: true
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 8.8.8.8
+
+log:
+  level: info
+  format: text
+
+policy:
+  mode: file
+  path: /etc/headscale-custom/acl.hujson

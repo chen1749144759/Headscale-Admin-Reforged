@@ -1,0 +1,20 @@
+# Headscale Admin Pro config
+server_url:
+  headscale: http://127.0.0.1:8080
+  api_key: ""
+
+database:
+  postgresql:
+    dsn: "postgresql://headscale_admin:HsAdmin%402026PG@127.0.0.1:15432/headscale_admin"
+
+policy:
+  path: "policy.hujson"
+
+secret_key: "HeadscaleAdminPro-SecretKey-2026!@#"
+
+listen_addr: "0.0.0.0:8080"
+server_net: ""
+bearer_token: "hskey-api-_7JmZwi3oRfp-I8v5ry4MiHJG8NGCDNIn1U_0mgeGO8V-1V209dttUhKT4eaJ2WNiakmzIpbdt3XJ"
+default_reg_days: 7
+default_node_count: 2
+open_user_reg: "on"

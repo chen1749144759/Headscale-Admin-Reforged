@@ -1,5 +1,13 @@
 __pycache__/
+*.pyc
 migrations/
 blueprints/__pycache__/
 headscale
+venv/
+.env
+*.db
 
+# Frontend
+web/node_modules/
+web/dist/
+node_modules/
