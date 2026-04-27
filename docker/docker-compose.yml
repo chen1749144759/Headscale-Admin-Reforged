@@ -1,0 +1,92 @@
+# Headscale Admin - Docker Compose 一键部署
+# 启动: docker compose up -d
+# 停止: docker compose down
+
+services:
+  # ==================== PostgreSQL 数据库 ====================
+  postgres:
+    image: postgres:16-alpine
+    container_name: hs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-headscale_admin}
+      POSTGRES_USER: ${POSTGRES_USER:-headscale_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-HsAdmin@2026PG}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - hs-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-headscale_admin}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ==================== Headscale 控制服务器 (AE) ====================
+  headscale:
+    image: chenzeshi/headscale-admin-ae:${AE_VERSION:-latest}
+    container_name: hs-headscale
+    restart: unless-stopped
+    volumes:
+      - ./headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - headscale-data:/var/lib/headscale
+    ports:
+      - "${HS_PORT:-8080}:8080"          # HTTP API + Noise 协议
+      - "${HS_STUN_PORT:-3478}:3478/udp" # STUN (内嵌 DERP)
+    networks:
+      - hs-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: serve -c /etc/headscale/config.yaml
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ==================== 管理面板后端 (FastAPI) ====================
+  admin-backend:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile
+    container_name: hs-admin-backend
+    restart: unless-stopped
+    environment:
+      - HEADSCALE_URL=http://headscale:8080
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-headscale_admin}:${POSTGRES_PASSWORD:-HsAdmin@2026PG}@postgres:5432/${POSTGRES_DB:-headscale_admin}
+    networks:
+      - hs-net
+    depends_on:
+      headscale:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5175/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ==================== Nginx 前端 + 反向代理 ====================
+  nginx:
+    build:
+      context: ..
+      dockerfile: docker/nginx/Dockerfile
+    container_name: hs-nginx
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    networks:
+      - hs-net
+    depends_on:
+      admin-backend:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  headscale-data:
+
+networks:
+  hs-net:
+    driver: bridge

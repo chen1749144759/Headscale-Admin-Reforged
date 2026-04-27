@@ -1,0 +1,58 @@
+# Headscale Admin AE - Docker 默认配置
+# 注意：server_url 必须改为你的服务器公网地址或域名
+
+# !! 部署前必须修改此项 !!
+server_url: http://YOUR_SERVER_IP:8080
+
+listen_addr: 0.0.0.0:8080
+grpc_listen_addr: 0.0.0.0:50443
+grpc_allow_insecure: false
+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: headscale
+    region_name: Headscale Embedded DERP
+    stun_listen_addr: 0.0.0.0:3478
+    verify_clients: false
+    private_key_path: /var/lib/headscale/derp.key
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+
+# 数据库连接（指向 compose 内的 postgres 容器）
+database:
+  type: postgres
+  postgres:
+    host: postgres
+    port: 5432
+    name: headscale_admin
+    user: headscale_admin
+    pass: HsAdmin@2026PG
+    ssl: false
+    max_open_conns: 10
+    max_idle_conns: 10
+    conn_max_idle_time_secs: 3600
+
+dns:
+  base_domain: hs.admin.pro
+  override_local_dns: true
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 8.8.8.8
+
+log:
+  level: info
+  format: text
+
+policy:
+  mode: database

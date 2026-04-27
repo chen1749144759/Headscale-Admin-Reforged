@@ -2,11 +2,11 @@ __pycache__/
 *.pyc
 migrations/
 blueprints/__pycache__/
-headscale
+/headscale
 venv/
 .env
 *.db
-config.yaml
+/config.yaml
 
 # Frontend
 web/node_modules/
