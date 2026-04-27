@@ -6,6 +6,7 @@ headscale
 venv/
 .env
 *.db
+config.yaml
 
 # Frontend
 web/node_modules/
