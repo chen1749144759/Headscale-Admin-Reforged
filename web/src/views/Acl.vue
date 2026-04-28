@@ -18,6 +18,17 @@
 
       <!-- 可视化编辑模式 -->
       <div v-show="activeTab === 'visual'" class="visual-editor">
+        <!-- 总览说明 -->
+        <details class="tip-collapse">
+          <summary class="tip-summary">ACL 概念说明（点击展开）</summary>
+          <div class="tip-body">
+            <p><b>ACL 规则页面</b>由三部分组成：<b>访问规则</b>、<b>分组定义</b>、<b>标签拥有者</b>。它们共同构成 Headscale 的访问控制策略。</p>
+            <p><b>访问规则 (acls)</b>：定义「谁」可以访问「谁」的「哪些端口」。来源和目标可以是用户名、分组定义名（group:xxx）、标签（tag:xxx）、IP 地址等。</p>
+            <p><b>分组定义 (groups)</b> 与 <b>分组管理页面</b> 的区别：分组管理页面管理的是 Headscale 的 <em>用户命名空间</em>（机器归属），而此处的分组定义是 ACL 策略层面的逻辑聚合 — 可以将多个用户命名空间归到一个 group:xxx 下，在访问规则中统一引用。例如 <code>group:devs = ["dev1", "dev2"]</code>，之后规则中写 <code>group:devs</code> 即代表 dev1 和 dev2 下的所有机器。你可以在「分组管理」页面快速管理分组定义。</p>
+            <p><b>标签拥有者 (tagOwners)</b>：定义哪些用户/分组可以为自己的机器打上特定标签。例如 <code>tag:server</code> 的拥有者设为 <code>group:ops</code>，那么 ops 组内的用户可以给机器打 <code>tag:server</code> 标签。打了标签的机器可以在访问规则中作为来源或目标使用。你可以在「用户管理」页面直接为机器设置标签。</p>
+          </div>
+        </details>
+
         <!-- ACL 规则列表 -->
         <div class="visual-section">
           <div class="visual-section-header">
@@ -486,5 +497,54 @@ onMounted(loadAcl)
   align-items: center;
   justify-content: space-between;
   margin-top: 4px;
+}
+
+/* 可折叠提示样式 */
+.tip-collapse {
+  margin-bottom: 16px;
+  border: 1px solid #f0dca0;
+  border-radius: 8px;
+  background: #fdf6e3;
+  overflow: hidden;
+}
+.tip-summary {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #92700c;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tip-summary::before {
+  content: '▶';
+  font-size: 10px;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+details[open] > .tip-summary::before {
+  transform: rotate(90deg);
+}
+.tip-summary::-webkit-details-marker {
+  display: none;
+}
+.tip-body {
+  padding: 0 16px 12px 16px;
+  font-size: 13px;
+  color: #5c4a0e;
+  line-height: 1.7;
+}
+.tip-body p {
+  margin: 6px 0;
+}
+.tip-body code {
+  background: rgba(0,0,0,0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
 }
 </style>

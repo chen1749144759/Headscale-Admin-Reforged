@@ -103,13 +103,17 @@
 
 ### 截图预览
 
-> 截图即将补充，敬请期待。
+| 控制台 | 用户管理 |
+|:---:|:---:|
+| ![控制台](docs/screenshots/首页.png) | ![用户管理](docs/screenshots/用户.png) |
 
-<!-- 
-![登录页](docs/screenshots/login.png)
-![控制台](docs/screenshots/dashboard.png)
-![节点管理](docs/screenshots/nodes.png)
--->
+| 分组管理 | ACL 规则 |
+|:---:|:---:|
+| ![分组管理](docs/screenshots/分组.png) | ![ACL 规则](docs/screenshots/ACL.png) |
+
+| 路由管理 | 预认证密钥 |
+|:---:|:---:|
+| ![路由管理](docs/screenshots/路由.png) | ![预认证密钥](docs/screenshots/预认证.png) |
 
 ### 快速开始
 
@@ -335,13 +339,17 @@ This project is forked from [arounyf/Headscale-Admin-Pro](https://github.com/aro
 
 ### Screenshots
 
-> Screenshots coming soon.
+| Dashboard | User Management |
+|:---:|:---:|
+| ![Dashboard](docs/screenshots/首页.png) | ![User Management](docs/screenshots/用户.png) |
 
-<!-- 
-![Login](docs/screenshots/login.png)
-![Dashboard](docs/screenshots/dashboard.png)
-![Nodes](docs/screenshots/nodes.png)
--->
+| Group Management | ACL Rules |
+|:---:|:---:|
+| ![Group Management](docs/screenshots/分组.png) | ![ACL Rules](docs/screenshots/ACL.png) |
+
+| Route Management | Preauthkeys |
+|:---:|:---:|
+| ![Route Management](docs/screenshots/路由.png) | ![Preauthkeys](docs/screenshots/预认证.png) |
 
 ### Quick Start
 

@@ -163,6 +163,29 @@ def move_node_user(node_id: str, req: ChangeUserReq, user: CurrentUser = Depends
     else:
         raise HTTPException(400, result.get('msg', '移动节点失败'))
 
+class SetTagsReq(_BaseModel):
+    tags: list
+
+@router.post('/{node_id}/tags')
+def set_node_tags(node_id: str, req: SetTagsReq, user: CurrentUser = Depends(require_manager)):
+    """设置节点的强制标签 — 调用 Headscale SetTags API"""
+    tags = req.tags or []
+    # 确保 tag 格式为 tag:xxx
+    formatted = [t if t.startswith('tag:') else f'tag:{t}' for t in tags]
+
+    result = hs_request('POST', f'/api/v1/node/{node_id}/tags', {'tags': formatted})
+
+    if result.get('code') == 0:
+        conn = get_db_conn()
+        try:
+            record_log(conn, user.id, f'设置节点 {node_id} 标签: {formatted}')
+            conn.commit()
+        finally:
+            conn.close()
+        return {'code': 0, 'msg': '标签已更新', 'data': result.get('data')}
+    else:
+        raise HTTPException(400, result.get('msg', '设置标签失败'))
+
 @router.post('/{node_id}/approve-routes')
 def approve_routes(node_id: str, routes: list, user: CurrentUser = Depends(get_current_user)):
     """批准路由（需要用户开启路由权限）"""

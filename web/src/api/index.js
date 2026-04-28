@@ -22,6 +22,7 @@ export const renameNode = (id, name) => request.post(`/nodes/${id}/rename?name=$
 export const getNodeInfo = (id) => request.get(`/nodes/${id}/info`)
 export const getNodeRoutes = (id) => request.get(`/nodes/${id}/routes`)
 export const moveNodeUser = (nodeId, newUser) => request.post(`/nodes/${nodeId}/move-user`, { new_user: newUser })
+export const setNodeTags = (nodeId, tags) => request.post(`/nodes/${nodeId}/tags`, { tags })
 
 // ─── 用户 ────────────────────────────────────────────
 export const getUsers = () => request.get('/users')

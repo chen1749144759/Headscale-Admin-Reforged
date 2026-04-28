@@ -15,6 +15,15 @@
         </div>
       </div>
 
+      <details class="tip-collapse" style="margin-bottom:12px">
+        <summary class="tip-summary">分组 与 ACL 分组定义 的区别（点击展开）</summary>
+        <div class="tip-body">
+          <p>此处的<b>分组 (Group)</b> 是 Headscale 的用户命名空间，每台机器注册时归属于一个分组。分组决定了机器的归属关系。</p>
+          <p><b>ACL 分组定义</b>是访问控制策略层面的逻辑聚合（如 <code>group:devs</code>），可以将多个分组归到一起，在 ACL 规则中统一引用。例如 <code>group:devs = ["dev1", "dev2"]</code>，在规则中写 <code>group:devs</code> 即表示 dev1 和 dev2 下的所有机器。</p>
+          <p>你可以在下方表格的「ACL 分组定义」列查看每个分组所属的定义，点击「定义」按钮可快速管理。</p>
+        </div>
+      </details>
+
       <el-table :data="hsUsers" v-loading="hsLoading" size="small" stripe>
         <el-table-column prop="name" label="Group 名称" min-width="120">
           <template #default="{ row }">
@@ -31,9 +40,18 @@
             <span>{{ getGroupAclCount(row.name) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="ACL 分组定义" min-width="160">
+          <template #default="{ row }">
+            <div style="display:flex;flex-wrap:wrap;gap:3px" v-if="getGroupDefinitions(row.name).length">
+              <el-tag v-for="g in getGroupDefinitions(row.name)" :key="g" size="small" type="success" effect="plain">{{ g }}</el-tag>
+            </div>
+            <span v-else style="color:var(--v3s-text-muted);font-size:12px">未加入任何定义</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="showGroupAcl(row)">ACL 设置</el-button>
+            <el-button type="success" link size="small" @click="showGroupDefDialog(row)">定义</el-button>
             <el-popconfirm :title="`确认删除 Group「${row.name}」？`" @confirm="handleDeleteHsUser(row)">
               <template #reference>
                 <el-button type="danger" link size="small" :disabled="row.name === 'admin'">删除</el-button>
@@ -113,6 +131,55 @@
       <template #footer>
         <el-button @click="groupAclVisible = false">取消</el-button>
         <el-button type="primary" :loading="groupAclSaving" @click="handleSaveGroupAcl">保存到 ACL</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 分组定义管理弹窗 -->
+    <el-dialog v-model="groupDefVisible" :title="`管理「${groupDefTarget?.name}」的 ACL 分组定义`" width="560px" destroy-on-close>
+      <details class="tip-collapse" style="margin-bottom:16px">
+        <summary class="tip-summary">分组定义说明（点击展开）</summary>
+        <div class="tip-body">
+          <p>此处管理 ACL 中的 <code>groups</code> 字段。一个 ACL 分组定义 (如 <code>group:devs</code>) 可以包含多个 Headscale 分组。</p>
+          <p>勾选后该分组将被加入对应的 ACL 定义中，在 ACL 规则中引用 <code>group:devs</code> 即包含该分组下所有机器。</p>
+        </div>
+      </details>
+      <div v-if="groupDefTarget" style="margin-bottom:16px">
+        <el-descriptions :column="1" size="small" border>
+          <el-descriptions-item label="分组名称">{{ groupDefTarget.name }}</el-descriptions-item>
+          <el-descriptions-item label="已属于定义">
+            <el-tag v-for="g in getGroupDefinitions(groupDefTarget.name)" :key="g" size="small" type="success" style="margin:2px">{{ g }}</el-tag>
+            <span v-if="!getGroupDefinitions(groupDefTarget.name).length" style="color:var(--v3s-text-muted);font-size:12px">无</span>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <div style="font-weight:600;margin-bottom:8px;font-size:13px">现有 ACL 分组定义</div>
+      <el-table :data="allGroupDefs" size="small" border style="margin-bottom:16px" empty-text="暂无分组定义">
+        <el-table-column label="定义名称" width="160">
+          <template #default="{ row }"><code>{{ row.name }}</code></template>
+        </el-table-column>
+        <el-table-column label="成员" min-width="200">
+          <template #default="{ row }">
+            <div style="display:flex;flex-wrap:wrap;gap:3px">
+              <el-tag v-for="m in row.members" :key="m" size="small" :type="m === groupDefTarget?.name ? 'success' : ''" effect="plain">{{ m }}</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="包含此分组" width="100">
+          <template #default="{ row }">
+            <el-switch :model-value="row.members.includes(groupDefTarget?.name)" @change="(v) => toggleGroupDef(row.name, v)" size="small" />
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div style="font-weight:600;margin-bottom:8px;font-size:13px">新建分组定义</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <el-input v-model="newGroupDefName" placeholder="定义名称（如 devs，自动加 group: 前缀）" style="flex:1" @keyup.enter="handleCreateGroupDef" />
+        <el-button type="primary" size="small" @click="handleCreateGroupDef">创建</el-button>
+      </div>
+
+      <template #footer>
+        <el-button @click="groupDefVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -460,6 +527,117 @@ async function handleSaveGroupAcl() {
   groupAclSaving.value = false
 }
 
+// ─── 分组定义管理 ───
+const groupDefVisible = ref(false)
+const groupDefTarget = ref(null)
+const allGroupDefs = ref([])    // [{name: 'group:devs', members: ['dev1','dev2']}]
+const newGroupDefName = ref('')
+
+function getGroupDefinitions(groupName) {
+  // 从 ACL groups 中查找包含此分组的定义
+  const groups = aclObj.value.groups || {}
+  const result = []
+  for (const [name, members] of Object.entries(groups)) {
+    if (Array.isArray(members) && members.includes(groupName)) {
+      result.push(name)
+    }
+  }
+  return result
+}
+
+async function showGroupDefDialog(group) {
+  groupDefTarget.value = group
+  newGroupDefName.value = ''
+
+  // 重新加载 ACL 获取最新数据
+  try {
+    const res = await getAcl()
+    const raw = res.data || '{}'
+    const cleaned = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,\s*([}\]])/g, '$1')
+    aclObj.value = JSON.parse(cleaned)
+  } catch { aclObj.value = {} }
+
+  // 解析所有分组定义
+  const groups = aclObj.value.groups || {}
+  allGroupDefs.value = Object.entries(groups).map(([name, members]) => ({
+    name,
+    members: Array.isArray(members) ? [...members] : [],
+  }))
+
+  groupDefVisible.value = true
+}
+
+async function toggleGroupDef(defName, include) {
+  // 切换此分组是否属于某个 ACL 分组定义
+  const groupName = groupDefTarget.value?.name
+  if (!groupName) return
+
+  try {
+    const res = await getAcl()
+    const raw = res.data || '{}'
+    const cleaned = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,\s*([}\]])/g, '$1')
+    const obj = JSON.parse(cleaned)
+    if (!obj.groups) obj.groups = {}
+    if (!obj.groups[defName]) obj.groups[defName] = []
+
+    const members = obj.groups[defName]
+    if (include) {
+      if (!members.includes(groupName)) {
+        members.push(groupName)
+      }
+    } else {
+      obj.groups[defName] = members.filter(m => m !== groupName)
+    }
+
+    await updateAcl({ acl: JSON.stringify(obj, null, 2) })
+    ElMessage.success(include ? `已将「${groupName}」加入 ${defName}` : `已从 ${defName} 移除「${groupName}」`)
+
+    // 刷新数据
+    aclObj.value = obj
+    allGroupDefs.value = Object.entries(obj.groups || {}).map(([name, ms]) => ({
+      name,
+      members: Array.isArray(ms) ? [...ms] : [],
+    }))
+  } catch (e) {
+    ElMessage.error('操作失败：' + (e.message || '未知错误'))
+  }
+}
+
+async function handleCreateGroupDef() {
+  let name = newGroupDefName.value.trim()
+  if (!name) return ElMessage.warning('请输入定义名称')
+  if (!name.startsWith('group:')) name = `group:${name}`
+
+  try {
+    const res = await getAcl()
+    const raw = res.data || '{}'
+    const cleaned = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,\s*([}\]])/g, '$1')
+    const obj = JSON.parse(cleaned)
+    if (!obj.groups) obj.groups = {}
+
+    if (obj.groups[name]) {
+      return ElMessage.warning(`定义 ${name} 已存在`)
+    }
+
+    // 创建时自动将当前分组加入
+    const groupName = groupDefTarget.value?.name
+    obj.groups[name] = groupName ? [groupName] : []
+
+    await updateAcl({ acl: JSON.stringify(obj, null, 2) })
+    ElMessage.success(`分组定义 ${name} 已创建`)
+    newGroupDefName.value = ''
+
+    // 刷新
+    aclObj.value = obj
+    allGroupDefs.value = Object.entries(obj.groups || {}).map(([n, ms]) => ({
+      name: n,
+      members: Array.isArray(ms) ? [...ms] : [],
+    }))
+  } catch (e) {
+    ElMessage.error('创建失败：' + (e.message || '未知错误'))
+  }
+}
+
 // ─── 平台用户管理 ───
 const filteredUsers = computed(() => {
   const s = search.value.toLowerCase()
@@ -529,5 +707,53 @@ onMounted(() => {
   font-size: 12px;
   word-break: break-all;
   line-height: 1.6;
+}
+
+/* 可折叠提示样式 */
+.tip-collapse {
+  border: 1px solid #f0dca0;
+  border-radius: 8px;
+  background: #fdf6e3;
+  overflow: hidden;
+}
+.tip-summary {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #92700c;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tip-summary::before {
+  content: '▶';
+  font-size: 10px;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+details[open] > .tip-summary::before {
+  transform: rotate(90deg);
+}
+.tip-summary::-webkit-details-marker {
+  display: none;
+}
+.tip-body {
+  padding: 0 16px 12px 16px;
+  font-size: 13px;
+  color: #5c4a0e;
+  line-height: 1.7;
+}
+.tip-body p {
+  margin: 6px 0;
+}
+.tip-body code {
+  background: rgba(0,0,0,0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
 }
 </style>
