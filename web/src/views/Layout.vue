@@ -106,7 +106,7 @@ const sidebarCollapsed = ref(false)
 const currentPath = computed(() => route.path)
 const currentName = computed(() => {
   const map = {
-    '/console': '控制台', '/nodes': '节点管理', '/users': '分组管理',
+    '/console': '控制台', '/users': '用户管理', '/groups': '分组管理',
     '/routes': '路由管理', '/acl': 'ACL 规则', '/preauthkeys': '预认证密钥',
     '/settings': '系统设置', '/logs': '操作日志', '/profile': '个人资料',
     '/password': '修改密码', '/deploy': '部署帮助',
@@ -124,7 +124,7 @@ const menuGroups = [
   {
     label: '网络管理',
     items: [
-      { name: '节点管理', path: '/nodes', icon: markRaw(Connection) },
+      { name: '用户管理', path: '/users', icon: markRaw(Connection) },
       { name: '路由管理', path: '/routes', icon: markRaw(Guide) },
       { name: '预认证密钥', path: '/preauthkeys', icon: markRaw(Key) },
     ],
@@ -133,7 +133,7 @@ const menuGroups = [
     label: '系统管理',
     managerOnly: true,
     items: [
-      { name: '分组管理', path: '/users', icon: markRaw(UserFilled), managerOnly: true },
+      { name: '分组管理', path: '/groups', icon: markRaw(UserFilled), managerOnly: true },
       { name: 'ACL 规则', path: '/acl', icon: markRaw(SetUp), managerOnly: true },
       { name: '系统设置', path: '/settings', icon: markRaw(Setting), managerOnly: true },
       { name: '操作日志', path: '/logs', icon: markRaw(Tickets), managerOnly: true },

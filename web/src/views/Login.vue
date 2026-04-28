@@ -54,6 +54,7 @@
           </el-form>
 
           <div class="form-footer">
+            <span v-if="openReg">还没有账户？<router-link to="/register" class="link-primary">立即注册</router-link></span>
           </div>
         </div>
       </div>
@@ -106,7 +107,7 @@ async function handleLogin() {
     userStore.setToken(res.data.token)
     userStore.userInfo = res.data.user
     ElMessage.success('登录成功')
-    const target = res.data.user.role === 'manager' ? '/console' : '/nodes'
+    const target = res.data.user.role === 'manager' ? '/console' : '/users'
     router.push(target)
   } catch {
     verified.value = false

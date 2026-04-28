@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>节点管理</h2><p>管理所有 Tailscale 机器节点，可直接设置访问控制、分组和标签</p></div>
+    <div class="page-header"><h2>用户管理</h2><p>管理所有 Tailscale 机器（每台机器 = 一个用户），可直接设置访问控制、分组和标签</p></div>
     <div class="glass-card content-card">
       <div class="toolbar">
         <div class="toolbar-left">

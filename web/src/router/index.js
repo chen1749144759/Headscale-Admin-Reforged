@@ -19,8 +19,8 @@ const routes = [
     redirect: '/console',
     children: [
       { path: 'console', name: 'Console', component: () => import('@/views/Console.vue') },
-      { path: 'nodes', name: 'Nodes', component: () => import('@/views/Nodes.vue') },
-      { path: 'users', name: 'Users', component: () => import('@/views/Users.vue'), meta: { requiresManager: true } },
+      { path: 'users', name: 'Users', component: () => import('@/views/User.vue') },
+      { path: 'groups', name: 'Groups', component: () => import('@/views/Group.vue'), meta: { requiresManager: true } },
       { path: 'routes', name: 'Routes', component: () => import('@/views/Routes.vue') },
       { path: 'acl', name: 'ACL', component: () => import('@/views/Acl.vue'), meta: { requiresManager: true } },
       { path: 'preauthkeys', name: 'Preauthkeys', component: () => import('@/views/Preauthkeys.vue') },
