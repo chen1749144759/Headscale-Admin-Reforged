@@ -62,18 +62,27 @@ def save_config(updates: dict):
 
 CFG = load_config()
 
-# 全局配置
-DATABASE_DSN = CFG.get('database', {}).get('postgresql', {}).get('dsn', '')
-SERVER_HOST = CFG.get('server_url', {}).get('headscale', 'http://127.0.0.1:8080')
-BEARER_TOKEN = CFG.get('bearer_token', '')
+# 全局配置 — 环境变量优先，config.yaml 兜底
+DATABASE_DSN = os.environ.get('DATABASE_URL') or CFG.get('database', {}).get('postgresql', {}).get('dsn', '')
+SERVER_HOST = os.environ.get('HEADSCALE_URL') or CFG.get('server_url', {}).get('headscale', 'http://127.0.0.1:8080')
+BEARER_TOKEN = os.environ.get('HEADSCALE_API_KEY') or CFG.get('bearer_token', '')
 SERVER_URL = CFG.get('server_url', {}).get('headscale', '')
 SERVER_NET = CFG.get('server_net', '')
-DEFAULT_REG_DAYS = int(CFG.get('default_reg_days', 7))
-DEFAULT_NODE_COUNT = int(CFG.get('default_node_count', 2))
-OPEN_USER_REG = CFG.get('open_user_reg', 'on')
-SECRET_KEY = CFG.get('secret_key', 'change-me')
+DEFAULT_REG_DAYS = int(os.environ.get('DEFAULT_REG_DAYS', 0) or CFG.get('default_reg_days', 7))
+DEFAULT_NODE_COUNT = int(os.environ.get('DEFAULT_NODE_COUNT', 0) or CFG.get('default_node_count', 2))
+OPEN_USER_REG = os.environ.get('OPEN_USER_REG') or CFG.get('open_user_reg', 'on')
+SECRET_KEY = os.environ.get('SECRET_KEY') or CFG.get('secret_key', 'change-me')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRE_SECONDS = 86400  # 24h
+
+# Docker 环境：尝试从共享卷读取 API Key
+_API_KEY_FILE = os.environ.get('API_KEY_FILE', '/data/headscale/api.key')
+if not BEARER_TOKEN and os.path.isfile(_API_KEY_FILE):
+    try:
+        with open(_API_KEY_FILE, 'r') as f:
+            BEARER_TOKEN = f.read().strip()
+    except Exception:
+        pass
 
 # ─── 数据库 ───────────────────────────────────────────
 def get_db():

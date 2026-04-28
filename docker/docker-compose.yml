@@ -66,6 +66,10 @@ services:
     environment:
       - HEADSCALE_URL=http://headscale:8080
       - DATABASE_URL=postgresql://${POSTGRES_USER:-headscale_admin}:${POSTGRES_PASSWORD:-HsAdmin@2026PG}@postgres:5432/${POSTGRES_DB:-headscale_admin}
+      - SECRET_KEY=${SECRET_KEY:-headscale-admin-secret-2026}
+      - API_KEY_FILE=/data/headscale/api.key
+    volumes:
+      - headscale-data:/data/headscale:ro
     networks:
       - hs-net
     depends_on:

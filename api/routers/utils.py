@@ -2,6 +2,7 @@
 工具模块
 包含Headscale API调用、系统工具函数等
 """
+import os
 import subprocess
 from typing import Optional
 
@@ -32,7 +33,20 @@ def hs_request(method: str, path: str, data=None) -> dict:
         return {'code': 1, 'msg': str(e)}
 
 def refresh_apikey() -> str:
-    """刷新 API Key"""
+    """刷新 API Key — 优先从共享文件读取，否则尝试本地 CLI"""
+    # Docker 环境：从共享卷文件读取
+    api_key_file = os.environ.get('API_KEY_FILE', '/data/headscale/api.key')
+    if os.path.isfile(api_key_file):
+        try:
+            with open(api_key_file, 'r') as f:
+                new_token = f.read().strip()
+            if new_token and new_token != deps.BEARER_TOKEN:
+                deps.BEARER_TOKEN = new_token
+                return new_token
+        except Exception as e:
+            print(f'从文件读取 API key 失败: {e}')
+
+    # 本地部署：通过 headscale CLI 创建
     try:
         result = subprocess.run('headscale apikey create', shell=True, capture_output=True, text=True, check=True)
         new_token = result.stdout.strip()
