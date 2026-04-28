@@ -1,6 +1,6 @@
 """
-用户路由模块
-处理用户管理、权限控制等
+平台账户路由模块
+处理平台账户管理、权限控制等
 """
 import psycopg2
 import psycopg2.extras
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from .dependencies import CurrentUser, get_current_user, require_manager, get_db_conn, record_log
 
-router = APIRouter(prefix="/api/users", tags=["用户"])
+router = APIRouter(prefix="/api/accounts", tags=["平台账户"])
 
 # 请求模型
 class UserUpdateReq(BaseModel):

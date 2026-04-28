@@ -1,6 +1,6 @@
 """
-节点路由模块
-处理节点相关的增删改查、注册、重命名等
+用户(机器)路由模块
+处理 Tailscale 机器（用户）相关的增删改查、注册、重命名等
 """
 import json
 
@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .dependencies import CurrentUser, get_current_user, require_manager, get_db_conn, record_log
 from .utils import hs_request
 
-router = APIRouter(prefix="/api/nodes", tags=["节点"])
+router = APIRouter(prefix="/api/users", tags=["用户(机器)"])
 
 
 def _get_node_name(node_id) -> str:

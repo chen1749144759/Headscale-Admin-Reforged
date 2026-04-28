@@ -31,7 +31,6 @@ class SettingsUpdateReq(BaseModel):
     bearer_token: Optional[str] = None
     default_reg_days: Optional[int] = None
     default_node_count: Optional[int] = None
-    open_user_reg: Optional[str] = None
     headscale_action: Optional[str] = None
 
 @router.get('/system/status')
@@ -47,22 +46,34 @@ def system_status(user: CurrentUser = Depends(get_current_user)):
             'headscale_running': hs_running,
             'headscale_healthy': hs_healthy,
             'headscale_version': hs_version,
-            'open_user_reg': deps.OPEN_USER_REG,
         }
     }
 
 @router.get('/public/status')
 def public_status():
-    """公开接口，无需登录"""
+    """公开接口，无需登录 — 返回系统初始化状态"""
     hs_running = get_headscale_pid() is not None
     hs_healthy = check_headscale_health() if hs_running else False
+    
+    # 查询数据库判断是否已有管理员
+    initialized = False
+    try:
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM users")
+            initialized = cur.fetchone()[0] > 0
+        finally:
+            conn.close()
+    except Exception:
+        pass
     
     return {
         'code': 0,
         'data': {
             'headscale_running': hs_running,
             'headscale_healthy': hs_healthy,
-            'open_user_reg': deps.OPEN_USER_REG,
+            'initialized': initialized,
         }
     }
 
@@ -117,7 +128,6 @@ def get_settings(user: CurrentUser = Depends(get_current_user)):
             'bearer_token': deps.BEARER_TOKEN[:8] + '...' if deps.BEARER_TOKEN else '',
             'default_reg_days': deps.DEFAULT_REG_DAYS,
             'default_node_count': deps.DEFAULT_NODE_COUNT,
-            'open_user_reg': deps.OPEN_USER_REG,
             'headscale_running': get_headscale_pid() is not None,
             'headscale_version': get_headscale_version(),
             'network_interfaces': interfaces,
@@ -143,9 +153,6 @@ def update_settings(req: SettingsUpdateReq, user: CurrentUser = Depends(get_curr
     if req.default_node_count is not None:
         deps.DEFAULT_NODE_COUNT = req.default_node_count
         updates['default_node_count'] = req.default_node_count
-    if req.open_user_reg is not None:
-        deps.OPEN_USER_REG = req.open_user_reg
-        updates['open_user_reg'] = req.open_user_reg
 
     if updates:
         for k, v in updates.items():

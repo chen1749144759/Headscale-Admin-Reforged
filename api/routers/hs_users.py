@@ -1,5 +1,5 @@
 """
-Headscale 用户(分组)路由模块
+分组路由模块
 管理 headscale 的用户命名空间（即分组：dev, uat, devops 等）
 """
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from .dependencies import CurrentUser, require_manager, get_db_conn, record_log
 from .utils import hs_request
 
-router = APIRouter(prefix="/api/hs-users", tags=["Headscale 分组"])
+router = APIRouter(prefix="/api/groups", tags=["分组"])
 
 
 class CreateHsUserReq(BaseModel):

@@ -70,7 +70,6 @@ SERVER_URL = CFG.get('server_url', {}).get('headscale', '')
 SERVER_NET = CFG.get('server_net', '')
 DEFAULT_REG_DAYS = int(os.environ.get('DEFAULT_REG_DAYS', 0) or CFG.get('default_reg_days', 7))
 DEFAULT_NODE_COUNT = int(os.environ.get('DEFAULT_NODE_COUNT', 0) or CFG.get('default_node_count', 2))
-OPEN_USER_REG = os.environ.get('OPEN_USER_REG') or CFG.get('open_user_reg', 'on')
 SECRET_KEY = os.environ.get('SECRET_KEY') or CFG.get('secret_key', 'change-me')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRE_SECONDS = 86400  # 24h

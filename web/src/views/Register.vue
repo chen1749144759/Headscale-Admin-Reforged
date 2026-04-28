@@ -16,8 +16,8 @@
 
         <!-- 右侧表单区 -->
         <div class="card-right">
-          <h2 class="form-title">注册</h2>
-          <p class="form-desc">创建您的管理账户</p>
+          <h2 class="form-title">初始化</h2>
+          <p class="form-desc">创建首个管理员账户以完成系统初始化</p>
 
           <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="handleRegister" class="register-form">
             <el-form-item prop="username">
@@ -48,7 +48,7 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { register } from '@/api'
+import { register, getPublicStatus } from '@/api'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -154,6 +154,13 @@ function initNetworkAnimation() {
 }
 
 onMounted(() => {
+  // 检查系统是否已初始化，已初始化则跳转登录
+  getPublicStatus().then(res => {
+    if (res.data?.initialized) {
+      ElMessage.warning('系统已初始化，无法注册新账户')
+      router.replace('/login')
+    }
+  }).catch(() => {})
   initNetworkAnimation()
 })
 

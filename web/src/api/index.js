@@ -14,24 +14,24 @@ export const getPublicStatus = () => request.get('/public/status')
 export const getSystemInfo = () => request.get('/system/info')
 export const getSystemTraffic = () => request.get('/system/traffic')
 
-// ─── 节点 ────────────────────────────────────────────
-export const getNodes = () => request.get('/nodes')
-export const deleteNode = (id) => request.delete(`/nodes/${id}`)
-export const expireNode = (id) => request.post(`/nodes/${id}/expire`)
-export const renameNode = (id, name) => request.post(`/nodes/${id}/rename?name=${name}`)
-export const getNodeInfo = (id) => request.get(`/nodes/${id}/info`)
-export const getNodeRoutes = (id) => request.get(`/nodes/${id}/routes`)
-export const moveNodeUser = (nodeId, newUser) => request.post(`/nodes/${nodeId}/move-user`, { new_user: newUser })
-export const setNodeTags = (nodeId, tags) => request.post(`/nodes/${nodeId}/tags`, { tags })
+// ─── 用户(机器) ──────────────────────────────────────
+export const getNodes = () => request.get('/users')
+export const deleteNode = (id) => request.delete(`/users/${id}`)
+export const expireNode = (id) => request.post(`/users/${id}/expire`)
+export const renameNode = (id, name) => request.post(`/users/${id}/rename?name=${name}`)
+export const getNodeInfo = (id) => request.get(`/users/${id}/info`)
+export const getNodeRoutes = (id) => request.get(`/users/${id}/routes`)
+export const moveNodeUser = (nodeId, newUser) => request.post(`/users/${nodeId}/move-user`, { new_user: newUser })
+export const setNodeTags = (nodeId, tags) => request.post(`/users/${nodeId}/tags`, { tags })
 
-// ─── 用户 ────────────────────────────────────────────
-export const getUsers = () => request.get('/users')
-export const deleteUser = (id) => request.delete(`/users/${id}`)
-export const updateUser = (id, data) => request.post(`/users/${id}/update`, data)
-export const updateUserExpire = (id, data) => request.post(`/users/${id}/update-expire`, data)
-export const updateUserNodeCount = (id, data) => request.post(`/users/${id}/update-node-count`, data)
-export const toggleUserEnable = (id, data) => request.post(`/users/${id}/toggle-enable`, data)
-export const toggleUserRoute = (id, data) => request.post(`/users/${id}/toggle-route`, data)
+// ─── 平台账户 ────────────────────────────────────────
+export const getUsers = () => request.get('/accounts')
+export const deleteUser = (id) => request.delete(`/accounts/${id}`)
+export const updateUser = (id, data) => request.post(`/accounts/${id}/update`, data)
+export const updateUserExpire = (id, data) => request.post(`/accounts/${id}/update-expire`, data)
+export const updateUserNodeCount = (id, data) => request.post(`/accounts/${id}/update-node-count`, data)
+export const toggleUserEnable = (id, data) => request.post(`/accounts/${id}/toggle-enable`, data)
+export const toggleUserRoute = (id, data) => request.post(`/accounts/${id}/toggle-route`, data)
 
 // ─── 路由 ────────────────────────────────────────────
 export const getRoutes = () => request.get('/routes')
@@ -43,10 +43,10 @@ export const getAcl = () => request.get('/acl')
 export const updateAcl = (data) => request.put('/acl', data)
 export const reloadHeadscale = () => request.post('/acl/reload')
 
-// ─── Headscale 分组(用户) ─────────────────────────────
-export const getHsUsers = () => request.get('/hs-users')
-export const createHsUser = (data) => request.post('/hs-users', data)
-export const deleteHsUser = (id) => request.delete(`/hs-users/${id}`)
+// ─── 分组 ────────────────────────────────────────────
+export const getHsUsers = () => request.get('/groups')
+export const createHsUser = (data) => request.post('/groups', data)
+export const deleteHsUser = (id) => request.delete(`/groups/${id}`)
 
 // ─── 预认证密钥 ──────────────────────────────────────
 export const getPreauthkeys = () => request.get('/preauthkeys')

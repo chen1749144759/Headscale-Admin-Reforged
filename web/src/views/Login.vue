@@ -54,7 +54,7 @@
           </el-form>
 
           <div class="form-footer">
-            <span v-if="openReg">还没有账户？<router-link to="/register" class="link-primary">立即注册</router-link></span>
+            <span v-if="openReg">首次使用？<router-link to="/register" class="link-primary">初始化系统</router-link></span>
           </div>
         </div>
       </div>
@@ -196,7 +196,8 @@ function initNetworkAnimation() {
 onMounted(async () => {
   try {
     const res = await getPublicStatus()
-    openReg.value = res.data?.open_user_reg === 'on'
+    // 未初始化时（数据库无管理员）才显示注册入口
+    openReg.value = res.data?.initialized === false
     userStore.systemStatus = res.data || userStore.systemStatus
   } catch {}
   initNetworkAnimation()

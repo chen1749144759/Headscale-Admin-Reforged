@@ -86,20 +86,10 @@ def login(req: LoginReq, response: Response):
 
 @router.post('/register')
 def register(req: RegisterReq):
-    """用户注册"""
+    """用户注册（仅允许首次初始化时注册管理员）"""
     username = req.username
     password = req.password
     confirmPassword = req.confirmPassword
-    if deps.OPEN_USER_REG != 'on':
-        conn = get_db_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM users")
-            count = cur.fetchone()[0]
-            if count > 0:
-                raise HTTPException(403, '注册已关闭')
-        finally:
-            conn.close()
 
     if password != confirmPassword:
         raise HTTPException(400, '两次密码不一致')
@@ -107,26 +97,23 @@ def register(req: RegisterReq):
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        # 检查用户名是否已存在
-        cur.execute("SELECT id FROM users WHERE name=%s", (username,))
-        if cur.fetchone():
-            raise HTTPException(400, '用户名已存在')
 
-        # 第一个注册的用户自动成为管理员
-        cur.execute("SELECT COUNT(*) FROM users")
+        # 检查系统是否已初始化（已有管理员）
+        cur.execute("SELECT COUNT(*) as count FROM users")
         count = cur.fetchone()['count']
-        role = 'manager' if count == 0 else 'user'
+        if count > 0:
+            raise HTTPException(403, '系统已完成初始化，无法注册新账户')
 
         hashed = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
         cur.execute(
             "INSERT INTO users (name, password, role, node, route, enable, expire, created_at, updated_at) "
             "VALUES (%s, %s, %s, %s, %s, %s, NOW() + INTERVAL '%s days', NOW(), NOW()) RETURNING id",
-            (username, hashed, role, deps.DEFAULT_NODE_COUNT, 0, 1, deps.DEFAULT_REG_DAYS)
+            (username, hashed, 'manager', deps.DEFAULT_NODE_COUNT, 0, 1, deps.DEFAULT_REG_DAYS)
         )
         user_id = cur.fetchone()['id']
         conn.commit()
         
-        return {'code': 0, 'msg': '注册成功', 'data': {'id': user_id, 'role': role}}
+        return {'code': 0, 'msg': '注册成功', 'data': {'id': user_id, 'role': 'manager'}}
     finally:
         conn.close()
 
