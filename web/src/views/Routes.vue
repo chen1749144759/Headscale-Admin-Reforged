@@ -159,24 +159,20 @@ async function loadRoutes() {
   loading.value = true
   try {
     const res = await getRoutes()
-    const data = res.data || []
-    // 后端返回 [{nodeId, nodeName, userName, routes:[{prefix, available, approved, isSubnet}]}]
-    const flat = []
-    for (const item of data) {
-      for (const r of (item.routes || [])) {
-        flat.push({
-          nodeId: item.nodeId,
-          nodeName: item.nodeName || `Node#${item.nodeId}`,
-          userName: item.userName || '-',
-          prefix: r.prefix,
-          approved: r.approved,
-          available: r.available,
-          isSubnet: r.isSubnet,
-          isExitNode: r.prefix === '0.0.0.0/0' || r.prefix === '::/0',
-        })
-      }
-    }
-    routes.value = flat
+    const raw = res.data
+    // 后端返回 {code:0, data: [{nodeId, nodeName, group, prefix, available, approved, active}]}
+    const data = raw?.data || raw || []
+    const flat = Array.isArray(data) ? data : []
+    routes.value = flat.map(r => ({
+      nodeId: r.nodeId,
+      nodeName: r.nodeName || `Node#${r.nodeId}`,
+      userName: r.group || r.userName || '-',
+      prefix: r.prefix,
+      approved: r.approved,
+      available: r.available,
+      active: r.active,
+      isExitNode: r.prefix === '0.0.0.0/0' || r.prefix === '::/0',
+    }))
   } catch {}
   loading.value = false
 }
