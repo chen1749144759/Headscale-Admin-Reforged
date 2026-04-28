@@ -57,18 +57,18 @@ def create_hs_user(req: CreateHsUserReq, user: CurrentUser = Depends(require_man
     return result
 
 
-@router.delete('/{name}')
-def delete_hs_user(name: str, user: CurrentUser = Depends(require_manager)):
-    """删除 headscale 用户(分组)"""
-    result = hs_request('DELETE', f'/api/v1/user/{name}')
+@router.delete('/{uid}')
+def delete_hs_user(uid: int, user: CurrentUser = Depends(require_manager)):
+    """删除 headscale 用户(分组) — 需传数字 ID，用户下有节点时会拒绝"""
+    result = hs_request('DELETE', f'/api/v1/user/{uid}')
 
     conn = get_db_conn()
     try:
-        record_log(conn, user.id, f'删除 headscale 分组: {name}')
+        record_log(conn, user.id, f'删除 headscale 分组 (ID: {uid})')
         conn.commit()
     finally:
         conn.close()
 
     if result.get('code') == 0:
-        return {'code': 0, 'msg': f'分组 {name} 删除成功'}
+        return {'code': 0, 'msg': '分组删除成功'}
     return result

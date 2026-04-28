@@ -15,7 +15,7 @@
         </div>
       </div>
       <div class="hs-group-list" v-loading="hsLoading">
-        <el-tag v-for="g in hsUsers" :key="g.name" size="large" closable @close="handleDeleteHsUser(g.name)"
+        <el-tag v-for="g in hsUsers" :key="g.id" size="large" closable @close="handleDeleteHsUser(g)"
           :type="g.name === 'admin' ? 'danger' : ''" class="hs-group-tag" :disable-transitions="true">
           {{ g.name }}
         </el-tag>
@@ -163,11 +163,11 @@ async function handleCreateHsUser() {
   hsCreateLoading.value = false
 }
 
-async function handleDeleteHsUser(name) {
+async function handleDeleteHsUser(group) {
   try {
-    await ElMessageBox.confirm(`确认删除分组「${name}」？删除后该分组下的节点和密钥也会受影响。`, '删除分组', { type: 'warning' })
-    await deleteHsUser(name)
-    ElMessage.success(`分组 ${name} 已删除`)
+    await ElMessageBox.confirm(`确认删除分组「${group.name}」？该分组下如有在线节点则无法删除。`, '删除分组', { type: 'warning' })
+    await deleteHsUser(group.id)
+    ElMessage.success(`分组 ${group.name} 已删除`)
     loadHsUsers()
   } catch {}
 }
