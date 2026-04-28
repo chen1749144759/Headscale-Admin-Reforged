@@ -28,17 +28,27 @@ services:
     container_name: hs-headscale
     restart: unless-stopped
     volumes:
-      - ./headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - ./headscale/config.yaml.tmpl:/etc/headscale/config.yaml.tmpl:ro
+      - ./headscale/entrypoint.sh:/entrypoint.sh:ro
       - headscale-data:/var/lib/headscale
     ports:
       - "${HS_PORT:-8080}:8080"          # HTTP API + Noise 协议
       - "${HS_STUN_PORT:-3478}:3478/udp" # STUN (内嵌 DERP)
+    environment:
+      - HEADSCALE_SERVER_URL=${HEADSCALE_SERVER_URL:-http://127.0.0.1:8080}
+      - HEADSCALE_DNS_DOMAIN=${HEADSCALE_DNS_DOMAIN:-hs.admin.pro}
+      - HEADSCALE_LOG_LEVEL=${HEADSCALE_LOG_LEVEL:-info}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB:-headscale_admin}
+      - DB_USER=${POSTGRES_USER:-headscale_admin}
+      - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin@2026PG}
+    entrypoint: ["sh", "/entrypoint.sh"]
     networks:
       - hs-net
     depends_on:
       postgres:
         condition: service_healthy
-    command: serve -c /etc/headscale/config.yaml
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 10s

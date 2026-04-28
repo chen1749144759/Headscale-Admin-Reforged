@@ -1,8 +1,8 @@
-# Headscale Admin AE - Docker 默认配置
-# 注意：server_url 必须改为你的服务器公网地址或域名
+# Headscale Admin AE - Docker 配置模板
+# 此文件由 entrypoint.sh 在容器启动时通过 envsubst 渲染为 config.yaml
+# 所有 ${VAR} 占位符会被替换为环境变量的实际值
 
-# !! 部署前必须修改此项 !!
-server_url: http://YOUR_SERVER_IP:8080
+server_url: ${HEADSCALE_SERVER_URL}
 
 listen_addr: 0.0.0.0:8080
 grpc_listen_addr: 0.0.0.0:50443
@@ -28,22 +28,21 @@ derp:
   urls:
     - https://controlplane.tailscale.com/derpmap/default
 
-# 数据库连接（指向 compose 内的 postgres 容器）
 database:
   type: postgres
   postgres:
-    host: postgres
-    port: 5432
-    name: headscale_admin
-    user: headscale_admin
-    pass: HsAdmin@2026PG
+    host: ${DB_HOST}
+    port: ${DB_PORT}
+    name: ${DB_NAME}
+    user: ${DB_USER}
+    pass: ${DB_PASS}
     ssl: false
     max_open_conns: 10
     max_idle_conns: 10
     conn_max_idle_time_secs: 3600
 
 dns:
-  base_domain: hs.admin.pro
+  base_domain: ${HEADSCALE_DNS_DOMAIN}
   override_local_dns: true
   nameservers:
     global:
@@ -51,7 +50,7 @@ dns:
       - 8.8.8.8
 
 log:
-  level: info
+  level: ${HEADSCALE_LOG_LEVEL}
   format: text
 
 policy:
