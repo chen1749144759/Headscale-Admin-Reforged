@@ -12,14 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routers import (
     auth_router,
-    nodes_router,
-    users_router,
+    machines_router,
+    accounts_router,
     routes_router,
     acl_router,
     preauthkeys_router,
     settings_router,
     logs_router,
-    hs_users_router,
+    groups_router,
 )
 
 # ─── 配置 ─────────────────────────────────────────────
@@ -44,14 +44,14 @@ app.add_middleware(
 
 # ─── 注册路由 ─────────────────────────────────────────
 app.include_router(auth_router)
-app.include_router(nodes_router)
-app.include_router(users_router)
+app.include_router(machines_router)
+app.include_router(accounts_router)
 app.include_router(routes_router)
 app.include_router(acl_router)
 app.include_router(preauthkeys_router)
 app.include_router(settings_router)
 app.include_router(logs_router)
-app.include_router(hs_users_router)
+app.include_router(groups_router)
 
 # ─── 健康检查 ─────────────────────────────────────────
 @app.get('/api/health')
