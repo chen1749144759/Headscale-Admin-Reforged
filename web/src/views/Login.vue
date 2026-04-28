@@ -54,7 +54,6 @@
           </el-form>
 
           <div class="form-footer">
-            <span v-if="openReg">还没有账户？<router-link to="/register" class="link-primary">立即注册</router-link></span>
           </div>
         </div>
       </div>

@@ -70,7 +70,7 @@
               <code class="route-prefix">{{ row.prefix }}</code>
             </template>
           </el-table-column>
-          <el-table-column label="允许的用户/Group" min-width="200">
+          <el-table-column label="允许的分组/Group" min-width="200">
             <template #default="{ row }">
               <el-tag v-for="u in row.approvers" :key="u" size="small" style="margin:2px" closable
                 @close="removeApprover('routes', row.prefix, u)">{{ u }}</el-tag>
@@ -106,9 +106,9 @@
         <el-form-item v-if="ruleForm.type === 'route'" label="网段 (CIDR)">
           <el-input v-model="ruleForm.prefix" placeholder="例如: 10.0.0.0/24" />
         </el-form-item>
-        <el-form-item label="允许的用户">
-          <el-input v-model="ruleForm.approver" placeholder="用户名或 group:xxx 或 *" />
-          <el-text type="info" size="small" style="margin-top:4px">支持格式: 用户名、group:groupName、tag:tagName、*（所有人）</el-text>
+        <el-form-item label="允许的分组">
+          <el-input v-model="ruleForm.approver" placeholder="分组名或 group:xxx 或 *" />
+          <el-text type="info" size="small" style="margin-top:4px">支持格式: 分组名、group:groupName、tag:tagName、*（所有人）</el-text>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -120,8 +120,8 @@
     <!-- 添加 Exit Node 审批者弹窗 -->
     <el-dialog v-model="addExitVisible" title="添加 Exit Node 审批者" width="400px">
       <el-form label-width="80px">
-        <el-form-item label="用户">
-          <el-input v-model="exitApproverInput" placeholder="用户名或 group:xxx 或 *" />
+        <el-form-item label="分组">
+          <el-input v-model="exitApproverInput" placeholder="分组名或 group:xxx 或 *" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -293,7 +293,7 @@ function showAddRule() {
 
 function handleAddRule() {
   const approver = ruleForm.approver.trim()
-  if (!approver) return ElMessage.warning('请输入用户')
+  if (!approver) return ElMessage.warning('请输入分组')
 
   if (ruleForm.type === 'route') {
     const prefix = ruleForm.prefix.trim()
@@ -326,7 +326,7 @@ function showAddExitApprover() {
 
 function handleAddExitApprover() {
   const val = exitApproverInput.value.trim()
-  if (!val) return ElMessage.warning('请输入用户')
+  if (!val) return ElMessage.warning('请输入分组')
   if (!exitNodeApprovers.value.includes(val)) {
     exitNodeApprovers.value.push(val)
   }

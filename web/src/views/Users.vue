@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>分组管理</h2><p>管理 Headscale Group 和平台用户，创建分组时自动生成 ACL 规则</p></div>
+    <div class="page-header"><h2>分组管理</h2><p>管理 Headscale 分组（机器归属）和平台账户</p></div>
 
     <!-- Headscale 分组管理 -->
     <div class="glass-card content-card" style="margin-bottom:16px">
@@ -123,7 +123,7 @@
         </el-table-column>
       </el-table>
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <el-input v-model="newGroupSrc" placeholder="来源：用户名/group:xxx/*" style="flex:1" />
+        <el-input v-model="newGroupSrc" placeholder="来源：分组名/group:xxx/*" style="flex:1" />
         <el-input v-model="newGroupPort" placeholder="端口：* 或 22,80" style="width:140px" @keyup.enter="addGroupInbound" />
         <el-button type="primary" size="small" @click="addGroupInbound">添加</el-button>
       </div>
@@ -187,7 +187,7 @@
     <div class="glass-card content-card">
       <div class="toolbar">
         <div class="toolbar-left">
-          <el-input v-model="search" placeholder="搜索用户名" prefix-icon="Search" clearable style="width:220px" />
+          <el-input v-model="search" placeholder="搜索分组名" prefix-icon="Search" clearable style="width:220px" />
         </div>
         <div class="toolbar-right">
           <el-button type="primary" @click="loadUsers" :icon="Refresh">刷新</el-button>
@@ -196,7 +196,7 @@
 
       <el-table :data="filteredUsers" v-loading="loading" stripe highlight-current-row table-layout="auto">
         <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="name" label="用户名" min-width="100">
+        <el-table-column prop="name" label="分组名" min-width="100">
           <template #default="{ row }">
             <span style="font-weight:600">{{ row.name }}</span>
           </template>
@@ -224,7 +224,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="showEditExpire(row)">修改到期</el-button>
-            <el-popconfirm title="确认删除此用户？" @confirm="handleDelete(row)" v-if="row.role !== 'manager'">
+            <el-popconfirm title="确认删除此分组？" @confirm="handleDelete(row)" v-if="row.role !== 'manager'">
               <template #reference><el-button type="danger" link size="small">删除</el-button></template>
             </el-popconfirm>
           </template>

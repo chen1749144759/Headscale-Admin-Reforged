@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>用户管理</h2><p>管理所有 Tailscale 机器（用户 = 机器节点），可直接设置访问控制、分组和标签</p></div>
+    <div class="page-header"><h2>节点管理</h2><p>管理所有 Tailscale 机器节点，可直接设置访问控制、分组和标签</p></div>
     <div class="glass-card content-card">
       <div class="toolbar">
         <div class="toolbar-left">
@@ -106,7 +106,7 @@
         </el-table-column>
       </el-table>
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <el-input v-model="newInboundSrc" placeholder="来源：用户名/group:xxx/*" style="flex:1" />
+        <el-input v-model="newInboundSrc" placeholder="来源：分组名/group:xxx/*" style="flex:1" />
         <el-input v-model="newInboundPort" placeholder="端口：* 或 22,80,443" style="width:160px" @keyup.enter="addInbound" />
         <el-button type="primary" size="small" @click="addInbound">添加</el-button>
       </div>

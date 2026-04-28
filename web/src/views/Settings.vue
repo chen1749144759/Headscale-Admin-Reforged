@@ -60,20 +60,6 @@
           <div class="form-tip">Headscale API 认证密钥，刷新后旧密钥失效</div>
         </el-form-item>
 
-        <el-divider content-position="left">注册策略</el-divider>
-        <el-form-item label="默认注册天数">
-          <el-input-number v-model="form.default_reg_days" :min="1" :max="365" />
-          <div class="form-tip">新用户注册后的默认账户有效期天数</div>
-        </el-form-item>
-        <el-form-item label="默认节点配额">
-          <el-input-number v-model="form.default_node_count" :min="1" :max="999" />
-          <div class="form-tip">新用户默认可管理的节点数量上限</div>
-        </el-form-item>
-        <el-form-item label="开放注册">
-          <el-switch v-model="regEnabled" active-text="开启" inactive-text="关闭" />
-          <div class="form-tip">关闭后新用户无法自行注册</div>
-        </el-form-item>
-
         <el-form-item v-if="editMode">
           <el-button type="primary" :loading="saving" @click="handleSave" size="large">
             <el-icon style="margin-right:4px"><Check /></el-icon>保存设置
@@ -120,13 +106,7 @@ let formBackup = null
 
 const form = ref({
   server_url: '', server_net: '', bearer_token: '',
-  default_reg_days: 7, default_node_count: 2, open_user_reg: 'on',
   headscale_running: false, headscale_version: '',
-})
-
-const regEnabled = computed({
-  get: () => form.value.open_user_reg === 'on',
-  set: (v) => { form.value.open_user_reg = v ? 'on' : 'off' },
 })
 
 const maskedToken = computed(() => {
@@ -178,9 +158,6 @@ async function confirmSave() {
     await updateSettings({
       server_url: form.value.server_url,
       server_net: form.value.server_net,
-      default_reg_days: form.value.default_reg_days,
-      default_node_count: form.value.default_node_count,
-      open_user_reg: form.value.open_user_reg,
     })
     ElMessage.success('设置已保存')
     pwdDialogVisible.value = false
