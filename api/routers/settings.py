@@ -68,10 +68,22 @@ def public_status():
 
 @router.get('/system/info')
 def system_info(user: CurrentUser = Depends(get_current_user)):
-    """获取系统信息（CPU、内存）"""
+    """获取系统信息（CPU、内存、内网IP）"""
     cpu = psutil.cpu_percent()
     mem = psutil.virtual_memory()
-    
+
+    # 获取所有非 loopback 的 IPv4 内网地址
+    internal_ips = []
+    try:
+        for name, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family == 2:  # AF_INET (IPv4)
+                    ip = addr.address
+                    if ip and not ip.startswith('127.'):
+                        internal_ips.append({'iface': name, 'ip': ip})
+    except Exception:
+        pass
+
     return {
         'code': 0,
         'data': {
@@ -79,6 +91,7 @@ def system_info(user: CurrentUser = Depends(get_current_user)):
             'memory_percent': mem.percent,
             'memory_total': mem.total,
             'memory_used': mem.used,
+            'internal_ips': internal_ips,
         }
     }
 

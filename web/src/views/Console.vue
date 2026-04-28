@@ -45,8 +45,16 @@
             <el-descriptions-item label="服务器地址">
               {{ serverUrl || '未配置' }}
             </el-descriptions-item>
-            <el-descriptions-item label="上行流量">{{ formatBytes(sysInfo.netSent) }}</el-descriptions-item>
-            <el-descriptions-item label="下行流量">{{ formatBytes(sysInfo.netRecv) }}</el-descriptions-item>
+            <el-descriptions-item label="内网IP">
+              <template v-if="internalIps.length">
+                <el-tag v-for="item in internalIps" :key="item.ip" size="small" effect="plain" style="margin:2px">
+                  {{ item.ip }}<span style="color:#999;margin-left:4px">({{ item.iface }})</span>
+                </el-tag>
+              </template>
+              <span v-else style="color:#999">获取中...</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="上行流量">{{ formatBytes(sysInfo.netSent) }} <span v-if="trafficRate.upRate" style="color:#10b981;margin-left:6px">↑ {{ formatBytes(trafficRate.upRate) }}/s</span></el-descriptions-item>
+            <el-descriptions-item label="下行流量">{{ formatBytes(sysInfo.netRecv) }} <span v-if="trafficRate.downRate" style="color:#4f46e5;margin-left:6px">↓ {{ formatBytes(trafficRate.downRate) }}/s</span></el-descriptions-item>
           </el-descriptions>
         </div>
       </el-col>
@@ -85,7 +93,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, markRaw } from 'vue'
+import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getSystemInfo, getSystemTraffic, getNodes, getUsers, getLogs } from '@/api'
@@ -95,6 +103,10 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const sysInfo = ref({ cpu: 0, memory: 0, memoryUsed: 0, memoryTotal: 0, netSent: 0, netRecv: 0 })
+const internalIps = ref([])
+const trafficRate = ref({ upRate: 0, downRate: 0 })
+let prevTraffic = { sent: 0, recv: 0, time: 0 }
+let trafficTimer = null
 const nodeCount = ref(0)
 const onlineCount = ref(0)
 const userCount = ref(0)
@@ -109,14 +121,14 @@ const hsVersion = computed(() => {
 const serverUrl = computed(() => userStore.systemStatus.server_url || '')
 
 const statCards = computed(() => [
-  { label: '在线节点', value: onlineCount.value, icon: markRaw(Connection), color: '#10b981' },
-  { label: '总节点数', value: nodeCount.value, icon: markRaw(Monitor), color: '#4f46e5' },
-  { label: '用户数', value: userCount.value, icon: markRaw(UserFilled), color: '#f59e0b' },
+  { label: '在线机器', value: onlineCount.value, icon: markRaw(Connection), color: '#10b981' },
+  { label: '总机器数', value: nodeCount.value, icon: markRaw(Monitor), color: '#4f46e5' },
+  { label: '分组数', value: userCount.value, icon: markRaw(UserFilled), color: '#f59e0b' },
   { label: 'CPU 使用率', value: sysInfo.value.cpu + '%', icon: markRaw(Cpu), color: '#06b6d4' },
 ])
 
 const quickActions = [
-  { label: '节点管理', desc: '查看和管理网络节点', path: '/nodes', icon: markRaw(Connection), color: 'rgba(79,70,229,.12)' },
+  { label: '用户管理', desc: '查看和管理网络机器', path: '/nodes', icon: markRaw(Connection), color: 'rgba(79,70,229,.12)' },
   { label: '预认证密钥', desc: '创建设备注册密钥', path: '/preauthkeys', icon: markRaw(Key), color: 'rgba(16,185,129,.12)' },
   { label: '路由管理', desc: '管理子网路由通告', path: '/routes', icon: markRaw(Guide), color: 'rgba(6,182,212,.12)' },
   { label: '系统设置', desc: '配置 Headscale 连接', path: '/settings', icon: markRaw(Setting), color: 'rgba(245,158,11,.12)' },
@@ -138,7 +150,7 @@ function formatBytes(b) {
 }
 
 onMounted(async () => {
-  // 系统信息（CPU/内存）
+  // 系统信息（CPU/内存/内网IP）
   try {
     const res = await getSystemInfo()
     const d = res.data || {}
@@ -146,6 +158,9 @@ onMounted(async () => {
     sysInfo.value.memory = Math.round(d.memory_percent ?? d.memory ?? 0)
     sysInfo.value.memoryUsed = d.memory_used ?? 0
     sysInfo.value.memoryTotal = d.memory_total ?? 0
+    if (Array.isArray(d.internal_ips)) {
+      internalIps.value = d.internal_ips
+    }
   } catch {}
 
   // 流量数据（独立接口）
@@ -154,6 +169,7 @@ onMounted(async () => {
     const d = res.data || {}
     sysInfo.value.netSent = d.bytes_sent ?? d.net_sent ?? 0
     sysInfo.value.netRecv = d.bytes_recv ?? d.net_recv ?? 0
+    prevTraffic = { sent: sysInfo.value.netSent, recv: sysInfo.value.netRecv, time: Date.now() }
   } catch {}
 
   // 节点统计
@@ -184,6 +200,31 @@ onMounted(async () => {
       recentLogs.value = res.data || []
     } catch {}
   }
+
+  // 实时流量速率：每5秒刷新
+  trafficTimer = setInterval(async () => {
+    try {
+      const res = await getSystemTraffic()
+      const d = res.data || {}
+      const nowSent = d.bytes_sent ?? d.net_sent ?? 0
+      const nowRecv = d.bytes_recv ?? d.net_recv ?? 0
+      const now = Date.now()
+      if (prevTraffic.time > 0) {
+        const elapsed = (now - prevTraffic.time) / 1000
+        if (elapsed > 0) {
+          trafficRate.value.upRate = Math.max(0, (nowSent - prevTraffic.sent) / elapsed)
+          trafficRate.value.downRate = Math.max(0, (nowRecv - prevTraffic.recv) / elapsed)
+        }
+      }
+      sysInfo.value.netSent = nowSent
+      sysInfo.value.netRecv = nowRecv
+      prevTraffic = { sent: nowSent, recv: nowRecv, time: now }
+    } catch {}
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (trafficTimer) clearInterval(trafficTimer)
 })
 </script>
 

@@ -25,6 +25,15 @@ def hs_request(method: str, path: str, data=None) -> dict:
             new_key = refresh_apikey()
             headers['Authorization'] = f'Bearer {new_key}'
             r = fn(url, headers=headers, json=data, timeout=10)
+        
+        if r.status_code >= 400:
+            try:
+                err_data = r.json()
+                msg = err_data.get('message', '') or err_data.get('error', '') or r.text
+            except Exception:
+                msg = r.text or f'HTTP {r.status_code}'
+            return {'code': 1, 'msg': msg}
+        
         try:
             return {'code': 0, 'data': r.json()}
         except Exception:

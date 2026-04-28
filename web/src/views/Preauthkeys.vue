@@ -17,7 +17,7 @@
             <el-button type="primary" link size="small" @click="copyKey(row.key)" style="margin-left:6px">复制</el-button>
           </template>
         </el-table-column>
-        <el-table-column label="用户" width="100">
+        <el-table-column label="分组" width="100">
           <template #default="{ row }">{{ row.user_name || '-' }}</template>
         </el-table-column>
         <el-table-column label="可复用" width="80">
@@ -25,7 +25,7 @@
             <el-tag :type="row.reusable ? 'success' : 'info'" size="small">{{ row.reusable ? '是' : '否' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="临时节点" width="90">
+        <el-table-column label="临时机器" width="90">
           <template #default="{ row }">
             <el-tag :type="row.ephemeral ? 'warning' : 'info'" size="small">{{ row.ephemeral ? '是' : '否' }}</el-tag>
           </template>
@@ -50,7 +50,7 @@
     <el-dialog v-model="createVisible" title="创建预认证密钥" width="440px">
       <el-form label-width="90px">
         <el-form-item label="所属分组">
-          <el-select v-model="createForm.hsUserId" placeholder="选择 headscale 分组" style="width:100%">
+          <el-select v-model="createForm.hsUserId" placeholder="选择 Headscale Group" style="width:100%">
             <el-option v-for="u in hsUsers" :key="u.id" :label="u.name" :value="u.id" />
           </el-select>
         </el-form-item>
@@ -58,9 +58,9 @@
           <el-switch v-model="createForm.reusable" />
           <el-text type="info" size="small" style="margin-left:8px">允许多个设备使用同一密钥</el-text>
         </el-form-item>
-        <el-form-item label="临时节点">
+        <el-form-item label="临时机器">
           <el-switch v-model="createForm.ephemeral" />
-          <el-text type="info" size="small" style="margin-left:8px">节点离线后自动删除</el-text>
+          <el-text type="info" size="small" style="margin-left:8px">机器离线后自动删除</el-text>
         </el-form-item>
         <el-form-item label="有效期">
           <el-select v-model="createForm.expireDays" style="width:100%">

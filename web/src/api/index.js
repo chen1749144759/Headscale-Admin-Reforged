@@ -21,6 +21,7 @@ export const expireNode = (id) => request.post(`/nodes/${id}/expire`)
 export const renameNode = (id, name) => request.post(`/nodes/${id}/rename?name=${name}`)
 export const getNodeInfo = (id) => request.get(`/nodes/${id}/info`)
 export const getNodeRoutes = (id) => request.get(`/nodes/${id}/routes`)
+export const moveNodeUser = (nodeId, newUser) => request.post(`/nodes/${nodeId}/move-user`, { new_user: newUser })
 
 // ─── 用户 ────────────────────────────────────────────
 export const getUsers = () => request.get('/users')
@@ -33,8 +34,8 @@ export const toggleUserRoute = (id, data) => request.post(`/users/${id}/toggle-r
 
 // ─── 路由 ────────────────────────────────────────────
 export const getRoutes = () => request.get('/routes')
-export const enableRoute = (id) => request.post(`/routes/${id}/enable`)
-export const disableRoute = (id) => request.post(`/routes/${id}/disable`)
+export const approveNodeRoutes = (nodeId, routes) => request.post(`/routes/node/${nodeId}/approve`, { routes })
+export const revokeNodeRoutes = (nodeId, routes) => request.post(`/routes/node/${nodeId}/revoke`, { routes })
 
 // ─── ACL ─────────────────────────────────────────────
 export const getAcl = () => request.get('/acl')

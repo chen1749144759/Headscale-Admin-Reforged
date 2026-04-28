@@ -28,6 +28,19 @@
         将 YOUR_AUTH_KEY 替换为在「预认证密钥」页面创建的密钥。注意：--login-server 地址是 Headscale 控制服务器（默认端口 8080），而非管理面板地址。
       </p>
     </div>
+
+    <div class="glass-card content-card" style="margin-top:16px">
+      <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">子网路由通告</h3>
+      <p style="color:var(--v3s-text-secondary);margin-bottom:12px">如需将本机作为子网路由器，使机器可以访问其他子网，在目标机器上执行：</p>
+      <div class="code-block" style="position:relative">
+        <span>tailscale up --login-server {{ serverUrl }} --advertise-routes=10.0.0.0/24,192.168.1.0/24</span>
+        <el-button type="primary" link size="small" class="copy-btn"
+          @click="copy(`tailscale up --login-server ${serverUrl} --advertise-routes=10.0.0.0/24,192.168.1.0/24`)">复制</el-button>
+      </div>
+      <p style="color:var(--v3s-text-muted);font-size:12px;margin-top:8px">
+        通告后需在「路由管理」页面批准路由才会生效。也可在 ACL 中配置 autoApprovers 实现自动批准。
+      </p>
+    </div>
   </div>
 </template>
 

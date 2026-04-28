@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/hs-users", tags=["Headscale 分组"])
 
 class CreateHsUserReq(BaseModel):
     name: str
+    node_count: int = 2  # 机器配额，默认2
 
 
 @router.get('')
@@ -47,7 +48,11 @@ def create_hs_user(req: CreateHsUserReq, user: CurrentUser = Depends(require_man
 
     conn = get_db_conn()
     try:
-        record_log(conn, user.id, f'创建 headscale 分组: {name}')
+        # 设置机器配额
+        if req.node_count and req.node_count > 0:
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET node = %s WHERE name = %s", (req.node_count, name))
+        record_log(conn, user.id, f'创建 headscale 分组: {name} (配额: {req.node_count})')
         conn.commit()
     finally:
         conn.close()

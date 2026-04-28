@@ -27,7 +27,7 @@ def get_acl(user: CurrentUser = Depends(get_current_user)):
         cur = conn.cursor()
         cur.execute("SELECT acl FROM acl ORDER BY id DESC LIMIT 1")
         row = cur.fetchone()
-        acl_text = row[0] if row else ''
+        acl_text = row['acl'] if row else ''
         return {'code': 0, 'data': acl_text}
     finally:
         conn.close()
@@ -63,7 +63,7 @@ def rewrite_acl(user: CurrentUser = Depends(require_manager)):
         cur = conn.cursor()
         cur.execute("SELECT acl FROM acl ORDER BY id DESC LIMIT 1")
         row = cur.fetchone()
-        acl_text = row[0] if row else ''
+        acl_text = row['acl'] if row else ''
         
         if not acl_text:
             raise HTTPException(400, '数据库中没有 ACL 规则')

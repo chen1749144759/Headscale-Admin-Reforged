@@ -136,6 +136,33 @@ def get_node_routes(node_id: str, user: CurrentUser = Depends(get_current_user))
     result = hs_request('GET', f'/api/v1/node/{node_id}/routes')
     return result
 
+
+from pydantic import BaseModel as _BaseModel
+
+class ChangeUserReq(_BaseModel):
+    new_user: str
+
+@router.post('/{node_id}/move-user')
+def move_node_user(node_id: str, req: ChangeUserReq, user: CurrentUser = Depends(require_manager)):
+    """将节点移动到另一个 headscale 分组(user) — 调用 Headscale AE MoveNode API"""
+    new_user = req.new_user
+    if not new_user:
+        raise HTTPException(400, '目标分组不能为空')
+
+    # 调用 Headscale AE 原生 MoveNode API，热更新内存+DB，无需重启
+    result = hs_request('POST', f'/api/v1/node/{node_id}/user', {'user': new_user})
+
+    if result.get('code') == 0:
+        conn = get_db_conn()
+        try:
+            record_log(conn, user.id, f'移动节点 {node_id} 到分组 {new_user}')
+            conn.commit()
+        finally:
+            conn.close()
+        return {'code': 0, 'msg': f'节点已移动到分组「{new_user}」'}
+    else:
+        raise HTTPException(400, result.get('msg', '移动节点失败'))
+
 @router.post('/{node_id}/approve-routes')
 def approve_routes(node_id: str, routes: list, user: CurrentUser = Depends(get_current_user)):
     """批准路由（需要用户开启路由权限）"""
