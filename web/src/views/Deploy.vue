@@ -25,7 +25,7 @@
           @click="copy(`tailscale up --login-server ${serverUrl} --authkey YOUR_AUTH_KEY`)">复制</el-button>
       </div>
       <p style="color:var(--v3s-text-muted);font-size:12px;margin-top:8px">
-        将 YOUR_AUTH_KEY 替换为在「预认证密钥」页面创建的密钥。
+        将 YOUR_AUTH_KEY 替换为在「预认证密钥」页面创建的密钥。注意：--login-server 地址是 Headscale 控制服务器（默认端口 8080），而非管理面板地址。
       </p>
     </div>
   </div>
@@ -62,7 +62,14 @@ function copy(text) {
 }
 
 onMounted(() => {
-  serverUrl.value = userStore.systemStatus?.server_url || window.location.origin
+  // login-server 应指向 headscale 控制服务器（默认8080），而非前端面板地址
+  const hsUrl = userStore.systemStatus?.server_url
+  if (hsUrl) {
+    serverUrl.value = hsUrl
+  } else {
+    // fallback: 用当前域名 + headscale 默认端口
+    serverUrl.value = `http://${window.location.hostname}:8080`
+  }
 })
 </script>
 
