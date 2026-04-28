@@ -62,9 +62,18 @@ class ApproveRoutesReq(BaseModel):
 def approve_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depends(get_current_user)):
     """批准指定节点的路由"""
     result = hs_request('POST', f'/api/v1/node/{node_id}/approve_routes', {'routes': req.routes})
+    # 查询节点名称用于日志
+    node_name = str(node_id)
+    try:
+        nr = hs_request('GET', f'/api/v1/node/{node_id}')
+        nd = nr.get('data', nr) if isinstance(nr, dict) else {}
+        nd = nd.get('node', nd) if isinstance(nd, dict) else {}
+        node_name = nd.get('givenName') or nd.get('name') or str(node_id)
+    except Exception:
+        pass
     conn = get_db_conn()
     try:
-        record_log(conn, user.id, f'批准节点 {node_id} 路由: {",".join(req.routes)}')
+        record_log(conn, user.id, f'批准 {node_name} 宣告路由: {", ".join(req.routes)}')
         conn.commit()
     finally:
         conn.close()
@@ -83,10 +92,13 @@ def revoke_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depen
     revoke_set = set(req.routes)
     new_approved = list(current_approved - revoke_set)
 
+    # 获取节点名称用于日志
+    node_name = node_data.get('givenName') or node_data.get('name') or str(node_id)
+
     result = hs_request('POST', f'/api/v1/node/{node_id}/approve_routes', {'routes': new_approved})
     conn = get_db_conn()
     try:
-        record_log(conn, user.id, f'撤销节点 {node_id} 路由: {",".join(req.routes)}')
+        record_log(conn, user.id, f'撤销 {node_name} 宣告路由: {", ".join(req.routes)}')
         conn.commit()
     finally:
         conn.close()

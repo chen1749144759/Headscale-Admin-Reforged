@@ -13,6 +13,17 @@ from .utils import hs_request
 
 router = APIRouter(prefix="/api/nodes", tags=["节点"])
 
+
+def _get_node_name(node_id) -> str:
+    """从 Headscale 查询节点名称，失败时返回 ID"""
+    try:
+        nr = hs_request('GET', f'/api/v1/node/{node_id}')
+        nd = nr.get('data', nr) if isinstance(nr, dict) else {}
+        nd = nd.get('node', nd) if isinstance(nd, dict) else {}
+        return nd.get('givenName') or nd.get('name') or str(node_id)
+    except Exception:
+        return str(node_id)
+
 @router.get('')
 def list_nodes(user: CurrentUser = Depends(get_current_user)):
     """获取节点列表"""
@@ -56,10 +67,11 @@ def register_node(registration_id: str, user: CurrentUser = Depends(get_current_
 @router.delete('/{node_id}')
 def delete_node(node_id: str, user: CurrentUser = Depends(get_current_user)):
     """删除节点"""
+    node_name = _get_node_name(node_id)
     result = hs_request('DELETE', f'/api/v1/node/{node_id}')
     conn = get_db_conn()
     try:
-        record_log(conn, user.id, f'删除节点 {node_id}')
+        record_log(conn, user.id, f'删除节点 {node_name}')
         conn.commit()
     finally:
         conn.close()
@@ -68,10 +80,11 @@ def delete_node(node_id: str, user: CurrentUser = Depends(get_current_user)):
 @router.post('/{node_id}/expire')
 def expire_node(node_id: str, user: CurrentUser = Depends(get_current_user)):
     """过期节点"""
+    node_name = _get_node_name(node_id)
     result = hs_request('POST', f'/api/v1/node/{node_id}/expire')
     conn = get_db_conn()
     try:
-        record_log(conn, user.id, f'过期节点 {node_id}')
+        record_log(conn, user.id, f'过期节点 {node_name}')
         conn.commit()
     finally:
         conn.close()
@@ -86,7 +99,7 @@ def rename_node(node_id: str, name: str, user: CurrentUser = Depends(get_current
     result = hs_request('POST', f'/api/v1/node/{node_id}/rename/{name}')
     conn = get_db_conn()
     try:
-        record_log(conn, user.id, f'重命名节点 {node_id} 为 {name}')
+        record_log(conn, user.id, f'重命名节点 {_get_node_name(node_id)} 为 {name}')
         conn.commit()
     finally:
         conn.close()
@@ -155,7 +168,7 @@ def move_node_user(node_id: str, req: ChangeUserReq, user: CurrentUser = Depends
     if result.get('code') == 0:
         conn = get_db_conn()
         try:
-            record_log(conn, user.id, f'移动节点 {node_id} 到分组 {new_user}')
+            record_log(conn, user.id, f'移动节点 {_get_node_name(node_id)} 到分组 {new_user}')
             conn.commit()
         finally:
             conn.close()
@@ -178,7 +191,7 @@ def set_node_tags(node_id: str, req: SetTagsReq, user: CurrentUser = Depends(req
     if result.get('code') == 0:
         conn = get_db_conn()
         try:
-            record_log(conn, user.id, f'设置节点 {node_id} 标签: {formatted}')
+            record_log(conn, user.id, f'设置节点 {_get_node_name(node_id)} 标签: {formatted}')
             conn.commit()
         finally:
             conn.close()

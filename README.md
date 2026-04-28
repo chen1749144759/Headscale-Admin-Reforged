@@ -90,13 +90,13 @@
 
 ### 功能列表
 
-- **用户管理** — 增删改查、过期设置、节点配额、路由权限、启用/禁用
-- **节点管理** — 列表、搜索、按用户筛选、重命名、删除、路由详情
-- **路由管理** — 列表查看、启用/禁用切换
+- **分组管理** — Headscale 用户命名空间管理、机器配额、ACL 规则模板自动生成、ACL 分组定义（group:xxx）可视化编辑
+- **节点管理** — 列表、搜索、按分组筛选、重命名、删除、标签管理（forcedTags）、移动分组
+- **路由管理** — 子网路由通告列表、批准/撤销、autoApprovers 可视化编辑、Exit Node 管理
+- **ACL 规则编辑器** — HuJSON 支持、格式化、行号显示、database 模式自动同步到 Headscale API
 - **预授权密钥** — 创建（过期时间/可复用/临时节点）、删除、一键复制
-- **ACL 规则编辑器** — HuJSON 支持、格式化、行号显示
 - **系统设置** — headscale 连接配置、API Key 管理、注册策略、安全锁定保护
-- **操作日志** — 分页查看操作记录
+- **操作日志** — 分页查看操作记录，日志内容显示机器名/分组名（非 ID）
 - **部署指南** — 内置部署说明页面
 - **个人中心** — 资料编辑、密码修改
 - **健康监测** — 顶部栏实时显示 headscale 连接状态
@@ -326,13 +326,13 @@ This project is forked from [arounyf/Headscale-Admin-Pro](https://github.com/aro
 
 ### Features
 
-- **User management** — CRUD, expiration, node quota, route permissions, enable/disable
-- **Node management** — List, search, filter by user, rename, delete, route details
-- **Route management** — List, enable/disable toggle
+- **Group management** — Headscale user namespace management, node quota, auto-generated ACL rule templates, visual ACL group definition (group:xxx) editor
+- **Node management** — List, search, filter by group, rename, delete, tag management (forcedTags), move between groups
+- **Route management** — Subnet route advertisement list, approve/revoke, visual autoApprovers editor, Exit Node management
+- **ACL rule editor** — HuJSON support, formatting, line numbers, auto-sync to Headscale API in database mode
 - **Preauthkey management** — Create (expiry/reusable/ephemeral), delete, one-click copy
-- **ACL rule editor** — HuJSON support, formatting, line numbers
 - **System settings** — Headscale connection, API key, registration policy, security lock
-- **Operation logs** — Paginated audit trail
+- **Operation logs** — Paginated audit trail with human-readable machine/group names (not IDs)
 - **Deployment guide** — Built-in deployment instructions page
 - **Profile & password** — Edit profile and change password
 - **Health monitoring** — Real-time headscale connection status in header bar

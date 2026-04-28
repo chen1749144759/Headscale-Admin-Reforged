@@ -213,17 +213,7 @@
             <el-link type="primary" @click="showEditNode(row)">{{ row.node || 0 }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column label="路由权限" width="90">
-          <template #default="{ row }">
-            <el-switch :model-value="String(row.route) === '1'" @change="v => handleToggleRoute(row, v)" size="small" />
-          </template>
-        </el-table-column>
-        <el-table-column label="启用状态" width="90">
-          <template #default="{ row }">
-            <el-switch :model-value="String(row.enable) === '1'" @change="v => handleToggleEnable(row, v)"
-              :disabled="row.name === 'admin'" size="small" />
-          </template>
-        </el-table-column>
+
         <el-table-column label="过期时间" min-width="140">
           <template #default="{ row }">
             <span v-if="row.expire">{{ row.expire }}</span>
@@ -275,7 +265,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import {
-  getUsers, deleteUser, toggleUserEnable, toggleUserRoute, updateUserExpire, updateUserNodeCount,
+  getUsers, deleteUser, updateUserExpire, updateUserNodeCount,
   getHsUsers, createHsUser, deleteHsUser, getNodes, getAcl, updateAcl
 } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -652,14 +642,6 @@ async function loadUsers() {
 
 async function handleDelete(row) {
   try { await deleteUser(row.id); ElMessage.success('删除成功'); loadUsers() } catch {}
-}
-
-async function handleToggleEnable(row, val) {
-  try { await toggleUserEnable(row.id, { enable: val }); ElMessage.success('更新成功'); loadUsers() } catch {}
-}
-
-async function handleToggleRoute(row, val) {
-  try { await toggleUserRoute(row.id, { enable: val }); ElMessage.success('更新成功'); loadUsers() } catch {}
 }
 
 // 修改到期
