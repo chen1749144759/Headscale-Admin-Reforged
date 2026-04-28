@@ -1,29 +1,20 @@
 <template>
   <div class="login-page">
-    <div class="login-bg">
-      <div class="grid-overlay"></div>
-      <div class="glow glow-1"></div>
-      <div class="glow glow-2"></div>
-      <div class="glow glow-3"></div>
-    </div>
+    <!-- 网络节点动画背景 -->
+    <canvas ref="bgCanvas" class="login-bg-canvas"></canvas>
 
     <div class="login-container">
       <div class="login-card-glass">
+        <!-- 左侧品牌区 -->
         <div class="card-left">
-          <div class="brand-content">
+          <div class="brand-center">
             <img src="/img/logo.ico" alt="Logo" class="brand-logo" />
-            <h1 class="brand-title">Headscale Admin</h1>
-            <p class="brand-subtitle">组网管理平台</p>
-            <div class="brand-divider"></div>
-            <ul class="brand-features">
-              <li>安全组网 — 基于 WireGuard 的零信任网络</li>
-              <li>集中管控 — 节点、用户、路由一站式管理</li>
-              <li>开箱即用 — 简洁部署，即刻启用</li>
-            </ul>
+            <h1 class="brand-title">Headscale</h1>
+            <p class="brand-subtitle">您的自有异地网络组建平台</p>
           </div>
-          <div class="brand-footer">Powered by Headscale v0.28</div>
         </div>
 
+        <!-- 右侧表单区 -->
         <div class="card-right">
           <h2 class="form-title">注册</h2>
           <p class="form-desc">创建您的管理账户</p>
@@ -55,7 +46,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { register } from '@/api'
 import { ElMessage } from 'element-plus'
@@ -95,6 +86,80 @@ async function handleRegister() {
     loading.value = false
   }
 }
+
+// ─── 网络节点动画背景 ───
+const bgCanvas = ref(null)
+let animId = null
+
+function initNetworkAnimation() {
+  const canvas = bgCanvas.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  let w, h, particles
+
+  function resize() {
+    w = canvas.width = window.innerWidth
+    h = canvas.height = window.innerHeight
+  }
+
+  function createParticles() {
+    const count = Math.floor((w * h) / 12000)
+    particles = []
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        r: Math.random() * 1.8 + 0.8,
+      })
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h)
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x
+        const dy = particles[i].y - particles[j].y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < 130) {
+          const alpha = (1 - dist / 130) * 0.2
+          ctx.beginPath()
+          ctx.moveTo(particles[i].x, particles[i].y)
+          ctx.lineTo(particles[j].x, particles[j].y)
+          ctx.strokeStyle = `rgba(99, 102, 241, ${alpha})`
+          ctx.lineWidth = 0.6
+          ctx.stroke()
+        }
+      }
+    }
+    for (const p of particles) {
+      p.x += p.vx
+      p.y += p.vy
+      if (p.x < 0 || p.x > w) p.vx *= -1
+      if (p.y < 0 || p.y > h) p.vy *= -1
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(129, 140, 248, 0.5)'
+      ctx.fill()
+    }
+    animId = requestAnimationFrame(draw)
+  }
+
+  resize()
+  createParticles()
+  draw()
+  window.addEventListener('resize', () => { resize(); createParticles() })
+}
+
+onMounted(() => {
+  initNetworkAnimation()
+})
+
+onBeforeUnmount(() => {
+  if (animId) cancelAnimationFrame(animId)
+})
 </script>
 
 <style scoped>
@@ -105,48 +170,40 @@ async function handleRegister() {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--v3s-login-bg-from), var(--v3s-login-bg-to));
+  background: linear-gradient(135deg, #0a0e1a, #111827, #0f172a);
 }
-.login-bg { position: absolute; inset: 0; z-index: 0; }
-.grid-overlay {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-.glow { position: absolute; border-radius: 50%; filter: blur(80px); animation: glowFloat 8s ease-in-out infinite; }
-.glow-1 { width: 400px; height: 400px; background: rgba(79,70,229,.3); top: -10%; left: -5%; }
-.glow-2 { width: 300px; height: 300px; background: rgba(6,182,212,.2); bottom: -5%; right: -5%; animation-delay: 3s; }
-.glow-3 { width: 200px; height: 200px; background: rgba(168,85,247,.15); top: 50%; left: 60%; animation-delay: 5s; }
-@keyframes glowFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(20px, -30px) scale(1.05); }
-  66% { transform: translate(-15px, 20px) scale(0.95); }
+.login-bg-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
 }
 .login-container { position: relative; z-index: 1; }
 .login-card-glass {
   display: flex; width: 820px; min-height: 480px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.06);
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 24px; overflow: hidden;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .card-left {
-  flex: 0 0 320px; padding: 40px 32px;
-  display: flex; flex-direction: column; justify-content: space-between;
+  flex: 0 0 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(255,255,255,0.03);
   border-right: 1px solid rgba(255,255,255,0.08);
 }
-.brand-content { flex: 1; }
-.brand-logo { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 20px; }
-.brand-title { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 6px; }
-.brand-subtitle { font-size: 13px; color: rgba(255,255,255,0.5); }
-.brand-divider { width: 40px; height: 3px; background: var(--v3s-primary); border-radius: 2px; margin: 24px 0; }
-.brand-features { list-style: none; padding: 0; }
-.brand-features li { font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 14px; line-height: 1.5; padding-left: 8px; }
-.brand-footer { font-size: 11px; color: rgba(255,255,255,0.25); }
+.brand-center { text-align: center; }
+.brand-logo {
+  width: 72px; height: 72px; border-radius: 18px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(79,70,229,0.3);
+}
+.brand-title { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 10px; letter-spacing: 1px; }
+.brand-subtitle { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.6; }
 .card-right { flex: 1; padding: 48px 40px; display: flex; flex-direction: column; justify-content: center; }
 .form-title { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 6px; }
 .form-desc { font-size: 13px; color: rgba(255,255,255,0.45); margin-bottom: 28px; }
@@ -172,8 +229,10 @@ async function handleRegister() {
 
 @media (max-width: 860px) {
   .login-card-glass { width: 95vw; flex-direction: column; }
-  .card-left { flex: 0 0 auto; padding: 24px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
-  .brand-features { display: none; }
+  .card-left {
+    flex: 0 0 auto; padding: 32px 24px;
+    border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
   .card-right { padding: 24px; }
 }
 </style>

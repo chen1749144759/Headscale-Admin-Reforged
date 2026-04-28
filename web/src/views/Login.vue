@@ -1,30 +1,18 @@
 <template>
   <div class="login-page">
-    <!-- 背景动画层 -->
-    <div class="login-bg">
-      <div class="grid-overlay"></div>
-      <div class="glow glow-1"></div>
-      <div class="glow glow-2"></div>
-      <div class="glow glow-3"></div>
-    </div>
+    <!-- 网络节点动画背景 -->
+    <canvas ref="bgCanvas" class="login-bg-canvas"></canvas>
 
     <!-- 登录卡片 -->
     <div class="login-container">
       <div class="login-card-glass">
         <!-- 左侧品牌区 -->
         <div class="card-left">
-          <div class="brand-content">
+          <div class="brand-center">
             <img src="/img/logo.ico" alt="Logo" class="brand-logo" />
-            <h1 class="brand-title">Headscale Admin</h1>
-            <p class="brand-subtitle">组网管理平台</p>
-            <div class="brand-divider"></div>
-            <ul class="brand-features">
-              <li><span class="feature-icon">&#xe001;</span>安全组网 — 基于 WireGuard 的零信任网络</li>
-              <li><span class="feature-icon">&#xe002;</span>集中管控 — 节点、用户、路由一站式管理</li>
-              <li><span class="feature-icon">&#xe003;</span>开箱即用 — 简洁部署，即刻启用</li>
-            </ul>
+            <h1 class="brand-title">Headscale</h1>
+            <p class="brand-subtitle">您的自有异地网络组建平台</p>
           </div>
-          <div class="brand-footer">Powered by Headscale v0.28</div>
         </div>
 
         <!-- 右侧表单区 -->
@@ -40,29 +28,21 @@
               <el-input v-model="form.password" placeholder="密码" type="password" show-password size="large" prefix-icon="Lock" @keyup.enter="handleLogin" />
             </el-form-item>
 
-            <!-- 拼图滑块验证 -->
+            <!-- 滑块验证 -->
             <el-form-item>
-              <div class="puzzle-verify" ref="puzzleRef">
-                <div class="puzzle-canvas-wrap">
-                  <canvas ref="bgCanvas" :width="puzzleW" :height="puzzleH"></canvas>
-                  <canvas ref="blockCanvas" :width="puzzleW" :height="puzzleH" class="puzzle-block" :style="{ left: blockLeft + 'px' }"></canvas>
-                  <div v-if="verified" class="puzzle-success-mask">
-                    <el-icon color="#10b981" :size="28"><CircleCheckFilled /></el-icon>
-                  </div>
-                  <div v-if="showRefresh && !verified" class="puzzle-refresh" @click="initPuzzle">
-                    <el-icon :size="16"><Refresh /></el-icon>
-                  </div>
-                </div>
-                <div class="puzzle-slider" :class="{ verified, failed: sliderFailed }">
-                  <div class="puzzle-slider-track">
-                    <div class="puzzle-slider-fill" :style="{ width: sliderLeft + 'px' }"></div>
-                    <div class="puzzle-slider-thumb" :style="{ left: sliderLeft + 'px' }" @mousedown="onSliderDown" @touchstart.prevent="onSliderDown">
-                      <el-icon v-if="!verified"><Right /></el-icon>
-                      <el-icon v-else color="#10b981"><Check /></el-icon>
-                    </div>
-                    <span class="puzzle-slider-text" v-if="!sliderLeft && !verified">拖动拼图完成验证</span>
-                  </div>
-                </div>
+              <div class="slide-verify-wrap">
+                <slide-verify
+                  ref="slideVerifyRef"
+                  :w="310"
+                  :h="155"
+                  :l="42"
+                  :r="10"
+                  :accuracy="5"
+                  slider-text="向右滑动完成验证"
+                  @success="onVerifySuccess"
+                  @fail="onVerifyFail"
+                  @refresh="onVerifyRefresh"
+                />
               </div>
             </el-form-item>
 
@@ -83,11 +63,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { login, getPublicStatus } from '@/api'
 import { ElMessage } from 'element-plus'
+import SlideVerify from 'vue3-slide-verify'
+import 'vue3-slide-verify/dist/style.css'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -101,172 +83,23 @@ const rules = {
 const loading = ref(false)
 const openReg = ref(false)
 
-// ─── 拼图验证相关 ───
-const puzzleW = 300
-const puzzleH = 160
-const pieceSize = 42
-const bgCanvas = ref(null)
-const blockCanvas = ref(null)
-const puzzleRef = ref(null)
-
-const blockLeft = ref(0)
-const sliderLeft = ref(0)
+// ─── 滑块验证 ───
+const slideVerifyRef = ref(null)
 const verified = ref(false)
-const sliderFailed = ref(false)
-const showRefresh = ref(false)
-let targetX = 0
-let puzzleImg = null
 
-function initPuzzle() {
+function onVerifySuccess() {
+  verified.value = true
+}
+function onVerifyFail() {
   verified.value = false
-  sliderFailed.value = false
-  sliderLeft.value = 0
-  blockLeft.value = 0
-  showRefresh.value = false
-
-  const bgCtx = bgCanvas.value?.getContext('2d')
-  const blkCtx = blockCanvas.value?.getContext('2d')
-  if (!bgCtx || !blkCtx) return
-
-  // 随机目标位置
-  targetX = Math.floor(Math.random() * (puzzleW - pieceSize * 2 - 20)) + pieceSize + 20
-  const targetY = Math.floor(Math.random() * (puzzleH - pieceSize - 20)) + 10
-
-  // 生成随机渐变背景
-  const colors = [
-    ['#1e3a5f', '#2d5a87', '#1a4570'],
-    ['#2d1b4e', '#4a2d7a', '#3b2260'],
-    ['#1b3a2f', '#2d6b50', '#1e4a3a'],
-    ['#3b1a1a', '#6b3030', '#4a2020'],
-  ]
-  const colorSet = colors[Math.floor(Math.random() * colors.length)]
-
-  bgCtx.clearRect(0, 0, puzzleW, puzzleH)
-  blkCtx.clearRect(0, 0, puzzleW, puzzleH)
-
-  // 画渐变背景
-  const grad = bgCtx.createLinearGradient(0, 0, puzzleW, puzzleH)
-  grad.addColorStop(0, colorSet[0])
-  grad.addColorStop(0.5, colorSet[1])
-  grad.addColorStop(1, colorSet[2])
-  bgCtx.fillStyle = grad
-  bgCtx.fillRect(0, 0, puzzleW, puzzleH)
-
-  // 画一些随机圆形装饰
-  for (let i = 0; i < 12; i++) {
-    bgCtx.beginPath()
-    bgCtx.arc(Math.random() * puzzleW, Math.random() * puzzleH, Math.random() * 30 + 5, 0, Math.PI * 2)
-    bgCtx.fillStyle = `rgba(255,255,255,${Math.random() * 0.08 + 0.02})`
-    bgCtx.fill()
-  }
-
-  // 画拼图形状到背景（挖空）
-  drawPuzzlePiece(bgCtx, targetX, targetY, 'fill')
-  bgCtx.fillStyle = 'rgba(0,0,0,0.4)'
-  bgCtx.fill()
-  bgCtx.strokeStyle = 'rgba(255,255,255,0.3)'
-  bgCtx.lineWidth = 1.5
-  bgCtx.stroke()
-
-  // 画拼图块
-  blkCtx.clearRect(0, 0, puzzleW, puzzleH)
-  drawPuzzlePiece(blkCtx, targetX, targetY, 'clip')
-  // 复制背景对应区域
-  const tempCanvas = document.createElement('canvas')
-  tempCanvas.width = puzzleW
-  tempCanvas.height = puzzleH
-  const tempCtx = tempCanvas.getContext('2d')
-  const grad2 = tempCtx.createLinearGradient(0, 0, puzzleW, puzzleH)
-  grad2.addColorStop(0, colorSet[0])
-  grad2.addColorStop(0.5, colorSet[1])
-  grad2.addColorStop(1, colorSet[2])
-  tempCtx.fillStyle = grad2
-  tempCtx.fillRect(0, 0, puzzleW, puzzleH)
-  for (let i = 0; i < 12; i++) {
-    tempCtx.beginPath()
-    tempCtx.arc(Math.random() * puzzleW, Math.random() * puzzleH, Math.random() * 30 + 5, 0, Math.PI * 2)
-    tempCtx.fillStyle = `rgba(255,255,255,${Math.random() * 0.08 + 0.02})`
-    tempCtx.fill()
-  }
-  blkCtx.drawImage(bgCanvas.value, 0, 0)
-  // 加白色描边
-  blkCtx.strokeStyle = 'rgba(255,255,255,0.8)'
-  blkCtx.lineWidth = 2
-  drawPuzzlePiece(blkCtx, targetX, targetY, 'stroke')
-  blkCtx.stroke()
 }
-
-function drawPuzzlePiece(ctx, x, y, op) {
-  const s = pieceSize
-  const r = s * 0.2
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  // 上凸
-  ctx.lineTo(x + s * 0.36, y)
-  ctx.arc(x + s * 0.5, y, r, Math.PI, 0, false)
-  ctx.lineTo(x + s, y)
-  // 右凸
-  ctx.lineTo(x + s, y + s * 0.36)
-  ctx.arc(x + s, y + s * 0.5, r, -Math.PI / 2, Math.PI / 2, false)
-  ctx.lineTo(x + s, y + s)
-  // 下
-  ctx.lineTo(x, y + s)
-  // 左凹
-  ctx.lineTo(x, y + s * 0.64)
-  ctx.arc(x, y + s * 0.5, r, Math.PI / 2, -Math.PI / 2, true)
-  ctx.lineTo(x, y)
-  ctx.closePath()
-
-  if (op === 'clip') ctx.clip()
-  else if (op === 'fill') { /* caller will fill */ }
-  else if (op === 'stroke') { /* caller will stroke */ }
-}
-
-function onSliderDown(e) {
-  if (verified.value) return
-  sliderFailed.value = false
-  const startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX
-  const startLeft = sliderLeft.value
-  const maxLeft = puzzleW - 40
-
-  function onMove(ev) {
-    const curX = ev.type === 'touchmove' ? ev.touches[0].clientX : ev.clientX
-    let dx = curX - startX + startLeft
-    dx = Math.max(0, Math.min(dx, maxLeft))
-    sliderLeft.value = dx
-    blockLeft.value = dx
-  }
-
-  function onUp() {
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
-    document.removeEventListener('touchmove', onMove)
-    document.removeEventListener('touchend', onUp)
-
-    const tolerance = 5
-    if (Math.abs(sliderLeft.value - targetX) < tolerance) {
-      verified.value = true
-      blockLeft.value = targetX
-      sliderLeft.value = targetX
-    } else {
-      sliderFailed.value = true
-      sliderLeft.value = 0
-      blockLeft.value = 0
-      showRefresh.value = true
-      setTimeout(() => { sliderFailed.value = false }, 400)
-      setTimeout(initPuzzle, 600)
-    }
-  }
-
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
-  document.addEventListener('touchmove', onMove)
-  document.addEventListener('touchend', onUp)
+function onVerifyRefresh() {
+  verified.value = false
 }
 
 // ─── 登录逻辑 ───
 async function handleLogin() {
-  if (!verified.value) return ElMessage.warning('请先完成拼图验证')
+  if (!verified.value) return ElMessage.warning('请先完成滑块验证')
   await formRef.value.validate()
   loading.value = true
   try {
@@ -278,10 +111,86 @@ async function handleLogin() {
     router.push(target)
   } catch {
     verified.value = false
-    initPuzzle()
+    slideVerifyRef.value?.refresh()
   } finally {
     loading.value = false
   }
+}
+
+// ─── 网络节点动画背景 ───
+const bgCanvas = ref(null)
+let animId = null
+
+function initNetworkAnimation() {
+  const canvas = bgCanvas.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  let w, h, particles
+
+  function resize() {
+    w = canvas.width = window.innerWidth
+    h = canvas.height = window.innerHeight
+  }
+
+  function createParticles() {
+    const count = Math.floor((w * h) / 12000)
+    particles = []
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        r: Math.random() * 1.8 + 0.8,
+      })
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h)
+
+    // 连线
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x
+        const dy = particles[i].y - particles[j].y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < 130) {
+          const alpha = (1 - dist / 130) * 0.2
+          ctx.beginPath()
+          ctx.moveTo(particles[i].x, particles[i].y)
+          ctx.lineTo(particles[j].x, particles[j].y)
+          ctx.strokeStyle = `rgba(99, 102, 241, ${alpha})`
+          ctx.lineWidth = 0.6
+          ctx.stroke()
+        }
+      }
+    }
+
+    // 粒子
+    for (const p of particles) {
+      p.x += p.vx
+      p.y += p.vy
+      if (p.x < 0 || p.x > w) p.vx *= -1
+      if (p.y < 0 || p.y > h) p.vy *= -1
+
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(129, 140, 248, 0.5)'
+      ctx.fill()
+    }
+
+    animId = requestAnimationFrame(draw)
+  }
+
+  resize()
+  createParticles()
+  draw()
+
+  window.addEventListener('resize', () => {
+    resize()
+    createParticles()
+  })
 }
 
 onMounted(async () => {
@@ -290,7 +199,11 @@ onMounted(async () => {
     openReg.value = res.data?.open_user_reg === 'on'
     userStore.systemStatus = res.data || userStore.systemStatus
   } catch {}
-  nextTick(initPuzzle)
+  initNetworkAnimation()
+})
+
+onBeforeUnmount(() => {
+  if (animId) cancelAnimationFrame(animId)
 })
 </script>
 
@@ -302,32 +215,16 @@ onMounted(async () => {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--v3s-login-bg-from), var(--v3s-login-bg-to));
+  background: linear-gradient(135deg, #0a0e1a, #111827, #0f172a);
 }
 
-/* ─── 背景层 ─── */
-.login-bg { position: absolute; inset: 0; z-index: 0; }
-.grid-overlay {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-.glow {
+/* ─── 网络节点动画背景 ─── */
+.login-bg-canvas {
   position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  animation: glowFloat 8s ease-in-out infinite;
-}
-.glow-1 { width: 400px; height: 400px; background: rgba(79,70,229,.3); top: -10%; left: -5%; animation-delay: 0s; }
-.glow-2 { width: 300px; height: 300px; background: rgba(6,182,212,.2); bottom: -5%; right: -5%; animation-delay: 3s; }
-.glow-3 { width: 200px; height: 200px; background: rgba(168,85,247,.15); top: 50%; left: 60%; animation-delay: 5s; }
-
-@keyframes glowFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(20px, -30px) scale(1.05); }
-  66% { transform: translate(-15px, 20px) scale(0.95); }
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* ─── 卡片容器 ─── */
@@ -336,40 +233,46 @@ onMounted(async () => {
   display: flex;
   width: 820px;
   min-height: 520px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.06);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 24px;
   overflow: hidden;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
-/* ─── 左侧品牌 ─── */
+/* ─── 左侧品牌：居中布局 ─── */
 .card-left {
   flex: 0 0 320px;
-  padding: 40px 32px;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
   background: rgba(255,255,255,0.03);
   border-right: 1px solid rgba(255,255,255,0.08);
 }
-.brand-content { flex: 1; }
-.brand-logo { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 20px; }
-.brand-title { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 6px; }
-.brand-subtitle { font-size: 13px; color: rgba(255,255,255,0.5); }
-.brand-divider { width: 40px; height: 3px; background: var(--v3s-primary); border-radius: 2px; margin: 24px 0; }
-.brand-features { list-style: none; padding: 0; }
-.brand-features li {
-  font-size: 13px;
-  color: rgba(255,255,255,0.6);
-  margin-bottom: 14px;
-  line-height: 1.5;
-  padding-left: 8px;
+.brand-center {
+  text-align: center;
 }
-.feature-icon { display: none; }
-.brand-footer { font-size: 11px; color: rgba(255,255,255,0.25); }
+.brand-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(79,70,229,0.3);
+}
+.brand-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+}
+.brand-subtitle {
+  font-size: 14px;
+  color: rgba(255,255,255,0.5);
+  line-height: 1.6;
+}
 
 /* ─── 右侧表单 ─── */
 .card-right {
@@ -410,116 +313,42 @@ onMounted(async () => {
 .link-primary { color: var(--v3s-primary-light); font-weight: 500; }
 .link-primary:hover { color: #fff; }
 
-/* ─── 拼图验证 ─── */
-.puzzle-verify { width: 100%; }
-.puzzle-canvas-wrap {
-  position: relative;
-  width: 300px;
-  height: 160px;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-.puzzle-canvas-wrap canvas { display: block; border-radius: 10px; }
-.puzzle-block {
-  position: absolute;
-  top: 0;
-  left: 0;
-  transition: none;
-}
-.puzzle-success-mask {
-  position: absolute;
-  inset: 0;
-  background: rgba(16,185,129,0.12);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-}
-.puzzle-refresh {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  background: rgba(0,0,0,0.45);
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #fff;
-  transition: background 0.2s;
-}
-.puzzle-refresh:hover { background: rgba(0,0,0,0.65); }
-
-.puzzle-slider { margin-top: 2px; }
-.puzzle-slider-track {
-  position: relative;
-  height: 38px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.1);
-  overflow: hidden;
-}
-.puzzle-slider-fill {
-  position: absolute; top: 0; left: 0; height: 100%;
-  background: linear-gradient(90deg, rgba(79,70,229,.25), rgba(79,70,229,.4));
-  border-radius: 8px 0 0 8px;
-  transition: width 0.02s;
-}
-.puzzle-slider.verified .puzzle-slider-fill {
-  background: linear-gradient(90deg, rgba(16,185,129,.2), rgba(16,185,129,.35));
-}
-.puzzle-slider.failed .puzzle-slider-track {
-  animation: shake 0.3s;
-  border-color: rgba(239,68,68,0.5);
-}
-.puzzle-slider-thumb {
-  position: absolute;
-  top: 2px;
-  width: 34px;
-  height: 34px;
-  background: rgba(255,255,255,0.15);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.25);
-  border-radius: 7px;
-  cursor: grab;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255,255,255,0.8);
-  z-index: 2;
-  user-select: none;
-  transition: background 0.15s;
-}
-.puzzle-slider-thumb:hover { background: rgba(255,255,255,0.25); }
-.puzzle-slider-thumb:active { cursor: grabbing; }
-.puzzle-slider.verified .puzzle-slider-thumb {
-  background: rgba(16,185,129,0.2);
-  border-color: rgba(16,185,129,0.4);
-}
-.puzzle-slider-text {
-  position: absolute;
+/* ─── 滑块验证适配深色主题 ─── */
+.slide-verify-wrap {
   width: 100%;
-  text-align: center;
-  line-height: 38px;
-  font-size: 12px;
-  color: rgba(255,255,255,0.3);
-  user-select: none;
 }
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-6px); }
-  75% { transform: translateX(6px); }
+.slide-verify-wrap :deep(.slide-verify) {
+  border-radius: 10px;
+  overflow: hidden;
+}
+.slide-verify-wrap :deep(.slide-verify-slider) {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+}
+.slide-verify-wrap :deep(.slide-verify-slider--text) {
+  color: rgba(255,255,255,0.35);
+  font-size: 13px;
+}
+.slide-verify-wrap :deep(.slide-verify-slider--icon) {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+}
+.slide-verify-wrap :deep(.slide-verify-slider--success) {
+  background: rgba(16,185,129,0.12);
+  border-color: rgba(16,185,129,0.3);
 }
 
 /* ─── 响应式 ─── */
 @media (max-width: 860px) {
   .login-card-glass { width: 95vw; flex-direction: column; }
-  .card-left { flex: 0 0 auto; padding: 24px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
-  .brand-features { display: none; }
+  .card-left {
+    flex: 0 0 auto;
+    padding: 32px 24px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
   .card-right { padding: 24px; }
 }
 </style>

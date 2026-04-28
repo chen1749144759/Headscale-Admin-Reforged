@@ -9,6 +9,7 @@ from .acl import router as acl_router
 from .preauthkeys import router as preauthkeys_router
 from .settings import router as settings_router
 from .logs import router as logs_router
+from .hs_users import router as hs_users_router
 
 __all__ = [
     "auth_router",
@@ -19,4 +20,5 @@ __all__ = [
     "preauthkeys_router",
     "settings_router",
     "logs_router",
+    "hs_users_router",
 ]

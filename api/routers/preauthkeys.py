@@ -16,6 +16,7 @@ class CreateKeyReq(BaseModel):
     reusable: bool = False
     ephemeral: bool = False
     expire_days: int = 7
+    hs_user_id: Optional[int] = None  # headscale 用户(分组) ID，为空则用当前登录用户 ID
 
 @router.get('')
 def list_preauthkeys(user: CurrentUser = Depends(get_current_user)):
@@ -65,11 +66,14 @@ def list_preauthkeys(user: CurrentUser = Depends(get_current_user)):
 
 @router.post('')
 def create_preauthkey(req: CreateKeyReq, user: CurrentUser = Depends(get_current_user)):
-    """创建预认证密钥 — user 字段必须传 headscale 数字 ID"""
+    """创建预认证密钥 — 支持指定 headscale 用户(分组)"""
     expire_date = datetime.utcnow() + timedelta(days=req.expire_days)
 
+    # 使用指定的 headscale 用户 ID，若未指定则用当前登录用户 ID
+    target_user_id = req.hs_user_id if req.hs_user_id is not None else user.id
+
     result = hs_request('POST', '/api/v1/preauthkey', {
-        'user': user.id,  # headscale v0.28 要求 uint64 数字 ID
+        'user': target_user_id,
         'reusable': req.reusable,
         'ephemeral': req.ephemeral,
         'expiration': expire_date.isoformat() + 'Z',

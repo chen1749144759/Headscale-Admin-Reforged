@@ -1,6 +1,42 @@
 <template>
   <div>
-    <div class="page-header"><h2>用户管理</h2><p>管理平台用户账户和权限</p></div>
+    <div class="page-header"><h2>用户管理</h2><p>管理平台用户和 Headscale 分组</p></div>
+
+    <!-- Headscale 分组管理 -->
+    <div class="glass-card content-card" style="margin-bottom:16px">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <h3 style="font-size:15px;font-weight:600;color:var(--v3s-text-primary);margin:0">Headscale 分组</h3>
+          <span style="font-size:12px;color:var(--v3s-text-muted);margin-left:8px">管理 headscale 用户命名空间（节点分组）</span>
+        </div>
+        <div class="toolbar-right">
+          <el-button @click="loadHsUsers" :icon="Refresh" size="small">刷新</el-button>
+          <el-button type="primary" @click="hsCreateVisible = true" size="small">新建分组</el-button>
+        </div>
+      </div>
+      <div class="hs-group-list" v-loading="hsLoading">
+        <el-tag v-for="g in hsUsers" :key="g.name" size="large" closable @close="handleDeleteHsUser(g.name)"
+          :type="g.name === 'admin' ? 'danger' : ''" class="hs-group-tag" :disable-transitions="true">
+          {{ g.name }}
+        </el-tag>
+        <el-tag v-if="!hsLoading && hsUsers.length === 0" type="info" size="large">暂无分组</el-tag>
+      </div>
+    </div>
+
+    <!-- 新建分组弹窗 -->
+    <el-dialog v-model="hsCreateVisible" title="新建 Headscale 分组" width="400px">
+      <el-form @submit.prevent="handleCreateHsUser">
+        <el-form-item label="分组名称">
+          <el-input v-model="hsNewName" placeholder="例如: dev, uat, devops" maxlength="30" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="hsCreateVisible = false">取消</el-button>
+        <el-button type="primary" :loading="hsCreateLoading" @click="handleCreateHsUser">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 平台用户管理 -->
     <div class="glass-card content-card">
       <div class="toolbar">
         <div class="toolbar-left">
@@ -91,14 +127,50 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getUsers, deleteUser, toggleUserEnable, toggleUserRoute, updateUserExpire, updateUserNodeCount } from '@/api'
-import { ElMessage } from 'element-plus'
+import { getUsers, deleteUser, toggleUserEnable, toggleUserRoute, updateUserExpire, updateUserNodeCount, getHsUsers, createHsUser, deleteHsUser } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const users = ref([])
 const search = ref('')
 const saveLoading = ref(false)
+
+// ─── Headscale 分组 ───
+const hsLoading = ref(false)
+const hsUsers = ref([])
+const hsCreateVisible = ref(false)
+const hsCreateLoading = ref(false)
+const hsNewName = ref('')
+
+async function loadHsUsers() {
+  hsLoading.value = true
+  try { const res = await getHsUsers(); hsUsers.value = res.data || [] } catch {}
+  hsLoading.value = false
+}
+
+async function handleCreateHsUser() {
+  const name = hsNewName.value.trim()
+  if (!name) return ElMessage.warning('请输入分组名称')
+  hsCreateLoading.value = true
+  try {
+    await createHsUser({ name })
+    ElMessage.success(`分组 ${name} 创建成功`)
+    hsNewName.value = ''
+    hsCreateVisible.value = false
+    loadHsUsers()
+  } catch {}
+  hsCreateLoading.value = false
+}
+
+async function handleDeleteHsUser(name) {
+  try {
+    await ElMessageBox.confirm(`确认删除分组「${name}」？删除后该分组下的节点和密钥也会受影响。`, '删除分组', { type: 'warning' })
+    await deleteHsUser(name)
+    ElMessage.success(`分组 ${name} 已删除`)
+    loadHsUsers()
+  } catch {}
+}
 
 const filteredUsers = computed(() => {
   const s = search.value.toLowerCase()
@@ -151,5 +223,23 @@ async function handleSaveNode() {
   saveLoading.value = false
 }
 
-onMounted(loadUsers)
+onMounted(() => {
+  loadUsers()
+  loadHsUsers()
+})
 </script>
+
+<style scoped>
+.hs-group-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0;
+  min-height: 36px;
+}
+.hs-group-tag {
+  font-size: 13px;
+  padding: 0 14px;
+  height: 32px;
+}
+</style>

@@ -19,6 +19,7 @@ from routers import (
     preauthkeys_router,
     settings_router,
     logs_router,
+    hs_users_router,
 )
 
 # ─── 配置 ─────────────────────────────────────────────
@@ -50,6 +51,7 @@ app.include_router(acl_router)
 app.include_router(preauthkeys_router)
 app.include_router(settings_router)
 app.include_router(logs_router)
+app.include_router(hs_users_router)
 
 # ─── 健康检查 ─────────────────────────────────────────
 @app.get('/api/health')

@@ -41,6 +41,11 @@ export const getAcl = () => request.get('/acl')
 export const updateAcl = (data) => request.put('/acl', data)
 export const reloadHeadscale = () => request.post('/acl/reload')
 
+// ─── Headscale 分组(用户) ─────────────────────────────
+export const getHsUsers = () => request.get('/hs-users')
+export const createHsUser = (data) => request.post('/hs-users', data)
+export const deleteHsUser = (name) => request.delete(`/hs-users/${name}`)
+
 // ─── 预认证密钥 ──────────────────────────────────────
 export const getPreauthkeys = () => request.get('/preauthkeys')
 export const createPreauthkey = (data) => request.post('/preauthkeys', data)

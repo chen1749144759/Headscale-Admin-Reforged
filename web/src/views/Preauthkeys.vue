@@ -49,6 +49,11 @@
     <!-- 创建密钥弹窗 -->
     <el-dialog v-model="createVisible" title="创建预认证密钥" width="440px">
       <el-form label-width="90px">
+        <el-form-item label="所属分组">
+          <el-select v-model="createForm.hsUserId" placeholder="选择 headscale 分组" style="width:100%">
+            <el-option v-for="u in hsUsers" :key="u.id" :label="u.name" :value="u.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="可复用">
           <el-switch v-model="createForm.reusable" />
           <el-text type="info" size="small" style="margin-left:8px">允许多个设备使用同一密钥</el-text>
@@ -88,7 +93,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getPreauthkeys, createPreauthkey, deletePreauthkey } from '@/api'
+import { getPreauthkeys, createPreauthkey, deletePreauthkey, getHsUsers } from '@/api'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 
@@ -98,7 +103,13 @@ const createVisible = ref(false)
 const createLoading = ref(false)
 const showKeyVisible = ref(false)
 const createdKey = ref('')
-const createForm = reactive({ reusable: false, ephemeral: false, expireDays: 30 })
+const createForm = reactive({ reusable: false, ephemeral: false, expireDays: 30, hsUserId: null })
+
+// headscale 分组列表
+const hsUsers = ref([])
+async function loadHsUsers() {
+  try { const res = await getHsUsers(); hsUsers.value = res.data || [] } catch {}
+}
 
 async function loadKeys() {
   loading.value = true
@@ -110,16 +121,23 @@ async function loadKeys() {
   loading.value = false
 }
 
-function showCreate() { createVisible.value = true }
+function showCreate() {
+  createForm.hsUserId = null
+  createVisible.value = true
+}
 
 async function handleCreate() {
   createLoading.value = true
   try {
-    const res = await createPreauthkey({
+    const payload = {
       reusable: createForm.reusable,
       ephemeral: createForm.ephemeral,
       expire_days: createForm.expireDays,
-    })
+    }
+    if (createForm.hsUserId != null) {
+      payload.hs_user_id = createForm.hsUserId
+    }
+    const res = await createPreauthkey(payload)
     createVisible.value = false
     createdKey.value = res.data?.key || res.data || ''
     showKeyVisible.value = true
@@ -136,5 +154,8 @@ function copyKey(key) {
   navigator.clipboard.writeText(key).then(() => ElMessage.success('已复制到剪贴板')).catch(() => ElMessage.error('复制失败'))
 }
 
-onMounted(loadKeys)
+onMounted(() => {
+  loadKeys()
+  loadHsUsers()
+})
 </script>
