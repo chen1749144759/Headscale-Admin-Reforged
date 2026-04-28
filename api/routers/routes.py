@@ -20,9 +20,12 @@ def list_routes(user: CurrentUser = Depends(get_current_user)):
     result = hs_request('GET', '/api/v1/node')
     nodes = []
     if isinstance(result, dict):
-        nodes = result.get('nodes', [])
-    elif isinstance(result, list):
-        nodes = result
+        # hs_request 返回 {'code': 0, 'data': {'nodes': [...]}}
+        data = result.get('data', result)
+        if isinstance(data, dict):
+            nodes = data.get('nodes', [])
+        elif isinstance(data, list):
+            nodes = data
 
     route_list = []
     for node in nodes:
