@@ -69,6 +69,8 @@ def delete_node(node_id: str, user: CurrentUser = Depends(get_current_user)):
     """删除节点"""
     node_name = _get_node_name(node_id)
     result = hs_request('DELETE', f'/api/v1/node/{node_id}')
+    if result.get('code') != 0:
+        raise HTTPException(500, result.get('msg', '删除节点失败'))
     conn = get_db_conn()
     try:
         record_log(conn, user.id, f'删除节点 {node_name}')
@@ -82,6 +84,8 @@ def expire_node(node_id: str, user: CurrentUser = Depends(get_current_user)):
     """过期节点"""
     node_name = _get_node_name(node_id)
     result = hs_request('POST', f'/api/v1/node/{node_id}/expire')
+    if result.get('code') != 0:
+        raise HTTPException(500, result.get('msg', '过期节点失败'))
     conn = get_db_conn()
     try:
         record_log(conn, user.id, f'过期节点 {node_name}')
@@ -97,6 +101,8 @@ def rename_node(node_id: str, name: str, user: CurrentUser = Depends(get_current
         raise HTTPException(400, '节点名称不能为空')
     
     result = hs_request('POST', f'/api/v1/node/{node_id}/rename/{name}')
+    if result.get('code') != 0:
+        raise HTTPException(500, result.get('msg', '重命名失败'))
     conn = get_db_conn()
     try:
         record_log(conn, user.id, f'重命名节点 {_get_node_name(node_id)} 为 {name}')
