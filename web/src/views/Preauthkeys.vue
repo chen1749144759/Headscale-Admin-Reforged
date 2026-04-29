@@ -79,13 +79,29 @@
     </el-dialog>
 
     <!-- 密钥展示弹窗 -->
-    <el-dialog v-model="showKeyVisible" title="密钥已创建" width="500px" :close-on-click-modal="false">
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom:12px">
+    <el-dialog v-model="showKeyVisible" title="密钥已创建" width="560px" :close-on-click-modal="false">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
         <template #title>请立即复制密钥，此密钥只显示一次！</template>
       </el-alert>
-      <div class="code-block" style="word-break:break-all">{{ createdKey }}</div>
+
+      <div class="key-label">密钥</div>
+      <div class="key-block">
+        <code class="key-text">{{ createdKey }}</code>
+        <span class="key-copy-btn" @click="copyKey(createdKey)" title="复制密钥">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </span>
+      </div>
+
+      <div class="key-label" style="margin-top:14px">连接命令</div>
+      <div class="key-block">
+        <code class="key-text">tailscale up --login-server {{ serverUrl }} --authkey {{ createdKey }} --accept-routes</code>
+        <span class="key-copy-btn" @click="copyKey(`tailscale up --login-server ${serverUrl} --authkey ${createdKey} --accept-routes`)" title="复制命令">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </span>
+      </div>
+
       <template #footer>
-        <el-button type="primary" @click="copyKey(createdKey); showKeyVisible = false">复制并关闭</el-button>
+        <el-button @click="showKeyVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -94,9 +110,11 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { getPreauthkeys, createPreauthkey, deletePreauthkey, getHsUsers } from '@/api'
+import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 
+const userStore = useUserStore()
 const loading = ref(false)
 const keys = ref([])
 const createVisible = ref(false)
@@ -104,6 +122,7 @@ const createLoading = ref(false)
 const showKeyVisible = ref(false)
 const createdKey = ref('')
 const createForm = reactive({ reusable: false, ephemeral: false, expireDays: 30, hsUserId: null })
+const serverUrl = ref('')
 
 // headscale 分组列表
 const hsUsers = ref([])
@@ -157,5 +176,48 @@ function copyKey(key) {
 onMounted(() => {
   loadKeys()
   loadHsUsers()
+  const hsUrl = userStore.systemStatus?.server_url
+  serverUrl.value = hsUrl || `http://${window.location.hostname}:8080`
 })
 </script>
+
+<style scoped>
+.key-label {
+  font-size: 12px;
+  color: var(--v3s-text-muted);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.key-block {
+  position: relative;
+  background: #0d0d0d;
+  border-radius: 8px;
+  padding: 14px 44px 14px 14px;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.key-text {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: #e2e8f0;
+  word-break: break-all;
+  line-height: 1.6;
+}
+.key-copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: rgba(255,255,255,.4);
+  cursor: pointer;
+  transition: all .2s;
+}
+.key-copy-btn:hover {
+  color: #fff;
+  background: rgba(255,255,255,.1);
+}
+</style>

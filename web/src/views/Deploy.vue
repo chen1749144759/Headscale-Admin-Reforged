@@ -20,12 +20,12 @@
       <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">连接命令</h3>
       <p style="color:var(--v3s-text-secondary);margin-bottom:12px">安装 Tailscale 客户端后，使用以下命令连接到本 Headscale 服务器：</p>
       <div class="code-block" style="position:relative">
-        <span>tailscale up --login-server {{ serverUrl }} --authkey YOUR_AUTH_KEY</span>
+        <span>tailscale up --login-server {{ serverUrl }} --authkey YOUR_AUTH_KEY --accept-routes</span>
         <el-button type="primary" link size="small" class="copy-btn"
-          @click="copy(`tailscale up --login-server ${serverUrl} --authkey YOUR_AUTH_KEY`)">复制</el-button>
+          @click="copy(`tailscale up --login-server ${serverUrl} --authkey YOUR_AUTH_KEY --accept-routes`)">复制</el-button>
       </div>
       <p style="color:var(--v3s-text-muted);font-size:12px;margin-top:8px">
-        将 YOUR_AUTH_KEY 替换为在「预认证密钥」页面创建的密钥。注意：--login-server 地址是 Headscale 控制服务器（默认端口 8080），而非管理面板地址。
+        将 YOUR_AUTH_KEY 替换为在「预认证密钥」页面创建的密钥。<code>--accept-routes</code> 用于接收其他节点通告的子网路由。注意：--login-server 地址是 Headscale 控制服务器（默认端口 8080），而非管理面板地址。
       </p>
     </div>
 
