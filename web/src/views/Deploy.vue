@@ -71,7 +71,21 @@ const platforms = [
 ]
 
 function copy(text) {
-  navigator.clipboard.writeText(text).then(() => ElMessage.success('已复制')).catch(() => ElMessage.error('复制失败'))
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => ElMessage.success('已复制')).catch(() => fallbackCopy(text))
+  } else {
+    fallbackCopy(text)
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px'
+  document.body.appendChild(ta)
+  ta.select()
+  try { document.execCommand('copy'); ElMessage.success('已复制') } catch { ElMessage.error('复制失败') }
+  document.body.removeChild(ta)
 }
 
 onMounted(() => {

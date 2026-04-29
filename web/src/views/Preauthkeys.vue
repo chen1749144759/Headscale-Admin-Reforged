@@ -170,7 +170,21 @@ async function handleDelete(row) {
 }
 
 function copyKey(key) {
-  navigator.clipboard.writeText(key).then(() => ElMessage.success('已复制到剪贴板')).catch(() => ElMessage.error('复制失败'))
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(key).then(() => ElMessage.success('已复制到剪贴板')).catch(() => fallbackCopy(key))
+  } else {
+    fallbackCopy(key)
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px'
+  document.body.appendChild(ta)
+  ta.select()
+  try { document.execCommand('copy'); ElMessage.success('已复制到剪贴板') } catch { ElMessage.error('复制失败') }
+  document.body.removeChild(ta)
 }
 
 onMounted(() => {
