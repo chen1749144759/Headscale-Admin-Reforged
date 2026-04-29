@@ -68,15 +68,31 @@ def refresh_apikey() -> str:
         return deps.BEARER_TOKEN
 
 def check_headscale_health() -> bool:
-    """检查 headscale 健康状态"""
+    """检查 headscale 健康状态（HTTP 方式，兼容 Docker 和本地部署）"""
     try:
         r = http_requests.get(deps.SERVER_HOST + '/health', timeout=3)
         return r.status_code == 200 and r.json().get('status') == 'pass'
     except Exception:
         return False
 
+def is_headscale_running() -> bool:
+    """判断 headscale 是否在运行
+    Docker 环境：通过 HTTP 健康检查判断（headscale 在另一个容器）
+    本地环境：优先检查进程，回退到 HTTP 健康检查
+    """
+    # 先尝试本地进程检测（本地部署场景）
+    try:
+        r = subprocess.run(['pgrep', '-f', 'headscale'], capture_output=True, text=True)
+        pids = r.stdout.strip().split('\n')
+        if pids and pids[0]:
+            return True
+    except Exception:
+        pass
+    # 本地进程不存在 → 尝试 HTTP 健康检查（Docker 场景：headscale 在另一个容器）
+    return check_headscale_health()
+
 def get_headscale_pid() -> Optional[int]:
-    """获取 headscale 进程ID"""
+    """获取 headscale 进程ID（仅本地部署有意义）"""
     try:
         r = subprocess.run(['pgrep', '-f', 'headscale'], capture_output=True, text=True)
         pids = r.stdout.strip().split('\n')
@@ -85,12 +101,25 @@ def get_headscale_pid() -> Optional[int]:
         return None
 
 def get_headscale_version() -> str:
-    """获取 headscale 版本"""
+    """获取 headscale 版本
+    本地部署：通过 CLI 获取
+    Docker 环境：通过 HTTP 健康检查接口回退
+    """
+    # 本地 CLI
     try:
         r = subprocess.run(['headscale', 'version'], capture_output=True, text=True, timeout=5)
-        return r.stdout.strip()
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
     except Exception:
-        return 'unknown'
+        pass
+    # Docker 环境：尝试从 API 获取
+    try:
+        r = http_requests.get(deps.SERVER_HOST + '/health', timeout=3)
+        if r.status_code == 200:
+            return r.headers.get('X-Headscale-Version', 'remote')
+    except Exception:
+        pass
+    return ''
 
 def get_server_net() -> dict:
     """获取服务器网络接口（使用 psutil，兼容 Docker 容器环境）"""

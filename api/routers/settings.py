@@ -16,7 +16,7 @@ from .dependencies import (
 )
 from . import dependencies as deps
 from .utils import (
-    get_headscale_pid, check_headscale_health, get_headscale_version,
+    is_headscale_running, check_headscale_health, get_headscale_version,
     get_server_net, refresh_apikey
 )
 
@@ -36,8 +36,8 @@ class SettingsUpdateReq(BaseModel):
 @router.get('/system/status')
 def system_status(user: CurrentUser = Depends(get_current_user)):
     """获取系统状态"""
-    hs_running = get_headscale_pid() is not None
-    hs_healthy = check_headscale_health() if hs_running else False
+    hs_running = is_headscale_running()
+    hs_healthy = check_headscale_health()
     hs_version = get_headscale_version() if hs_running else ''
     
     return {
@@ -52,8 +52,8 @@ def system_status(user: CurrentUser = Depends(get_current_user)):
 @router.get('/public/status')
 def public_status():
     """公开接口，无需登录 — 返回系统初始化状态"""
-    hs_running = get_headscale_pid() is not None
-    hs_healthy = check_headscale_health() if hs_running else False
+    hs_running = is_headscale_running()
+    hs_healthy = check_headscale_health()
     
     # 查询数据库判断是否已有管理员
     initialized = False
@@ -128,7 +128,7 @@ def get_settings(user: CurrentUser = Depends(get_current_user)):
             'bearer_token': deps.BEARER_TOKEN[:8] + '...' if deps.BEARER_TOKEN else '',
             'default_reg_days': deps.DEFAULT_REG_DAYS,
             'default_node_count': deps.DEFAULT_NODE_COUNT,
-            'headscale_running': get_headscale_pid() is not None,
+            'headscale_running': is_headscale_running(),
             'headscale_version': get_headscale_version(),
             'network_interfaces': interfaces,
         }
