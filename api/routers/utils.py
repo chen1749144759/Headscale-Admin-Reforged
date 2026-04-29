@@ -93,15 +93,12 @@ def get_headscale_version() -> str:
         return 'unknown'
 
 def get_server_net() -> dict:
-    """获取服务器网络接口"""
+    """获取服务器网络接口（使用 psutil，兼容 Docker 容器环境）"""
     try:
-        r = subprocess.run(['ip', 'link', 'show'], capture_output=True, text=True, check=True)
-        interfaces = []
-        for line in r.stdout.split('\n'):
-            if ': ' in line and 'lo:' not in line:
-                name = line.split(': ')[1].split('@')[0].strip()
-                if name and name != 'lo':
-                    interfaces.append(name)
+        interfaces = [
+            name for name in psutil.net_if_addrs().keys()
+            if name != 'lo'
+        ]
         return {'network_interfaces': interfaces}
     except Exception:
         return {'network_interfaces': []}
