@@ -56,9 +56,7 @@ services:
 
   # ==================== 管理面板后端 (FastAPI) ====================
   admin-backend:
-    build:
-      context: ..
-      dockerfile: docker/backend/Dockerfile
+    image: chenzeshi/headscale-admin-backend:${BACKEND_VERSION:-latest}
     container_name: hs-admin-backend
     restart: unless-stopped
     environment:
@@ -86,9 +84,7 @@ services:
 
   # ==================== Nginx 前端 + 反向代理 ====================
   nginx:
-    build:
-      context: ..
-      dockerfile: docker/nginx/Dockerfile
+    image: chenzeshi/headscale-admin-nginx:${NGINX_VERSION:-latest}
     container_name: hs-nginx
     restart: unless-stopped
     ports:
