@@ -565,6 +565,81 @@ tailscale up --login-server=http://你的公网IP:8080
 
 ---
 
+## 常见问题
+
+### Tailscale 子网路由不通（ping 内网 IP 无响应）
+
+**现象**：两个节点通过 `100.64.x.x` 互相 ping 正常，但从节点 A ping 节点 B advertise 的子网 IP（如 `10.2.0.88`）时无响应。
+
+**原因**：如果节点 A 同时也是 Headscale 服务器所在的机器，Headscale 自己的 WireGuard 隧道接口（如 `tun-v3s`）已经注册了 `10.0.0.0/x` 网段的路由，优先级比 Tailscale 的子网路由更高。流量会被 Headscale 接口截走，不会走 Tailscale 隧道。
+
+可以用以下命令确认：
+
+```bash
+ip route get 10.2.0.88
+# 如果输出 dev tun-v3s 而非 dev tailscale0，说明路由被 Headscale 截走了
+```
+
+**解决方案**：
+
+这是一个网络架构层面的冲突，不要在 Headscale 服务器上同时运行 Tailscale 客户端来测试子网路由功能。使用一台独立的机器作为 Tailscale 客户端进行测试。
+
+### 子网路由通告后仍然不通的检查清单
+
+如果使用独立客户端测试子网路由仍然不通，按以下顺序排查：
+
+**1. 通告节点开启 IP 转发**
+
+```bash
+# 查看当前状态
+sysctl net.ipv4.ip_forward
+
+# 开启（临时）
+sysctl -w net.ipv4.ip_forward=1
+sysctl -w net.ipv6.conf.all.forwarding=1
+
+# 永久生效
+echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
+echo 'net.ipv6.conf.all.forwarding = 1' >> /etc/sysctl.conf
+sysctl -p
+```
+
+**2. Headscale 侧批准路由**
+
+在管理面板的"路由管理"中批准对应的子网路由，或通过命令行：
+
+```bash
+headscale routes list
+headscale routes enable -r <route_id>
+```
+
+**3. 接收端开启 accept-routes**
+
+```bash
+tailscale up --login-server=http://你的headscale地址:8080 --accept-routes
+```
+
+**4. 通告节点关闭严格反向路径过滤**
+
+```bash
+sysctl -w net.ipv4.conf.all.rp_filter=2
+sysctl -w net.ipv4.conf.tailscale0.rp_filter=2
+```
+
+### Tailscale 客户端切换到新的 Headscale 服务器
+
+如果旧服务器已不可达，`tailscale logout` 会报连接错误。直接重置本地状态即可：
+
+```bash
+# Linux
+sudo systemctl stop tailscaled
+sudo rm -rf /var/lib/tailscale
+sudo systemctl start tailscaled
+tailscale up --login-server=http://新服务器地址:8080
+```
+
+---
+
 ## 相关项目
 
 | 项目 | 说明 |
