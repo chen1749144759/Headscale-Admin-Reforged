@@ -4,6 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Element Plus](https://img.shields.io/badge/Element%20Plus-2.x-409EFF?logo=element&logoColor=white)](https://element-plus.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](#方式一docker-compose-一键部署推荐)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Headscale Web 管理面板 — 完全重写版**
@@ -33,71 +34,48 @@
 | 后端框架 | Python 3.13 + FastAPI + Uvicorn |
 | 前端框架 | Vue 3 + Vite + Element Plus + Pinia + Vue Router 4 |
 | 认证鉴权 | JWT + 原生 bcrypt（兼容 Python 3.13 + bcrypt 5.x） |
-| 数据库 | 直接共享 headscale 的 SQLite / PostgreSQL（扩展 users 表） |
-| API 代理 | Bearer Token 调用 headscale HTTP API，支持 `headscale apikey create` 自动刷新 |
+| 数据库 | PostgreSQL 16（Docker 部署）/ SQLite（本地开发） |
+| Headscale | [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE)（增强版，扩展 users 表） |
+| API 代理 | Bearer Token 调用 headscale HTTP API，自动创建并刷新 API Key |
 
 ### 架构概览
 
 ```
-                          ┌─────────────────────────────────┐
-                          │           Browser               │
-                          └──────────────┬──────────────────┘
-                                         │
-                                         ▼
-                          ┌─────────────────────────────────┐
-                          │     Nginx (port 5174)           │
-                          │  ┌───────────┬────────────┐     │
-                          │  │ Vue SPA   │ /api/*     │     │
-                          │  │ 静态文件   │ 反向代理    │     │
-                          │  └───────────┴─────┬──────┘     │
-                          └────────────────────┼────────────┘
-                                               │
-                                               ▼
-                          ┌─────────────────────────────────┐
-                          │   FastAPI + Uvicorn (port 5175) │
-                          │          REST API Server        │
-                          └──────┬──────────────────┬───────┘
-                                 │                  │
-                                 ▼                  ▼
-                    ┌────────────────────┐  ┌───────────────┐
-                    │  Headscale API     │  │  SQLite /     │
-                    │  (port 18919)      │  │  PostgreSQL   │
-                    └────────────────────┘  └───────────────┘
+                              ┌─────────────────────────────────┐
+                              │           Browser               │
+                              └──────────────┬──────────────────┘
+                                             │ :80
+                                             ▼
+                              ┌─────────────────────────────────┐
+                              │        Nginx (前端+反代)          │
+                              │  ┌───────────┬────────────────┐ │
+                              │  │ Vue3 SPA  │ /api/* → :5175 │ │
+                              │  │ 静态文件   │ /hs/*  → :8080 │ │
+                              │  └───────────┴────────┬───────┘ │
+                              └───────────────────────┼─────────┘
+                                        ┌─────────────┤
+                                        ▼             ▼
+                    ┌──────────────────────┐   ┌───────────────────┐
+                    │  FastAPI (port 5175) │   │  Headscale AE     │
+                    │    管理面板后端        │   │   (port 8080)     │
+                    └─────────┬────────────┘   └────────┬──────────┘
+                              │                         │
+                              ▼                         ▼
+                    ┌──────────────────────────────────────────────┐
+                    │          PostgreSQL 16 (共享数据库)            │
+                    └──────────────────────────────────────────────┘
 ```
-
-### 相较原版的核心变化
-
-| # | 变更项 | 原版 4.0.0 | Reforged |
-|---|--------|-----------|----------|
-| 1 | 架构模式 | Flask + Jinja2 单体 | 前后端分离（SPA + REST API） |
-| 2 | 后端框架 | Flask | FastAPI + Pydantic 请求模型 + 规范参数绑定 |
-| 3 | 前端方案 | Jinja2 服务端渲染 | Vue 3 SPA + Element Plus 组件库 |
-| 4 | UI 设计 | 原版样式 | 深色玻璃拟态主题（深蓝侧边栏、毛玻璃卡片、靛蓝强调色） |
-| 5 | 认证库 | passlib | 原生 bcrypt（解决 Python 3.13 兼容性问题） |
-| 6 | PreAuthKey | user 字段类型错误 | 修正为 uint64 ID |
-| 7 | 数据处理 | — | 正确解析 headscale API 嵌套响应结构 |
-| 8 | 系统设置 | — | 新增锁定/解锁模式 + 敏感操作密码确认 |
-| 9 | ACL 编辑器 | — | 全高度深色编辑器，支持行号和 JSON 格式化 |
-| 10 | 控制台仪表盘 | — | 实时 CPU/内存/流量监控，修正 API 字段映射 |
-
-### UI 亮点
-
-- **登录页**：左右分栏布局 + 拼图滑块验证码
-- **独立注册页**：支持独立访问的注册流程
-- **侧边栏**：深蓝色调（`#0d1117`）
-- **卡片组件**：`backdrop-filter: blur` 毛玻璃效果
-- **强调色**：靛蓝（`#4f46e5`）
 
 ### 功能列表
 
-- **分组管理** — Headscale 用户命名空间管理、机器配额、ACL 规则模板自动生成、ACL 分组定义（group:xxx）可视化编辑
+- **控制台仪表盘** — 实时 CPU/内存/流量监控，节点统计
+- **分组管理** — Headscale 用户命名空间管理、机器配额、ACL 规则模板自动生成
 - **节点管理** — 列表、搜索、按分组筛选、重命名、删除、标签管理（forcedTags）、移动分组
 - **路由管理** — 子网路由通告列表、批准/撤销、autoApprovers 可视化编辑、Exit Node 管理
-- **ACL 规则编辑器** — HuJSON 支持、格式化、行号显示、database 模式自动同步到 Headscale API
+- **ACL 规则编辑器** — HuJSON 支持、格式化、行号显示、database 模式自动同步
 - **预授权密钥** — 创建（过期时间/可复用/临时节点）、删除、一键复制
 - **系统设置** — headscale 连接配置、API Key 管理、注册策略、安全锁定保护
 - **操作日志** — 分页查看操作记录，日志内容显示机器名/分组名（非 ID）
-- **部署指南** — 内置部署说明页面
 - **个人中心** — 资料编辑、密码修改
 - **健康监测** — 顶部栏实时显示 headscale 连接状态
 
@@ -115,127 +93,496 @@
 |:---:|:---:|
 | ![路由管理](docs/screenshots/路由.png) | ![预认证密钥](docs/screenshots/预认证.png) |
 
-### 快速开始
+---
+
+## 部署指南
+
+提供三种部署方式，根据你的场景选择：
+
+| 方式 | 适用场景 | 难度 |
+|------|----------|------|
+| [Docker Compose 一键部署](#方式一docker-compose-一键部署推荐) | 生产环境、快速体验 | ⭐ |
+| [Docker 单容器部署](#方式二docker-单容器部署) | 已有数据库/headscale，只需部分组件 | ⭐⭐ |
+| [裸应用部署](#方式三裸应用部署) | 完全自主控制、开发调试 | ⭐⭐⭐ |
+
+---
+
+### 方式一：Docker Compose 一键部署（推荐）
+
+最简单的部署方式，一条命令拉起全部服务（PostgreSQL + Headscale AE + 管理后端 + Nginx 前端）。
 
 #### 前置要求
 
+- Linux 服务器（推荐 Ubuntu 22/24）
+- Docker + Docker Compose
+
+还没装 Docker？一条命令搞定：
+
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+#### 第一步：下载 docker-compose.yml
+
+```bash
+mkdir -p ~/headscale-admin && cd ~/headscale-admin
+
+curl -fsSL -o docker-compose.yml \
+  https://raw.githubusercontent.com/chen1749144759/Headscale-Admin-Reforged/main/docker/docker-compose.yml
+```
+
+#### 第二步：创建 .env 配置文件
+
+```bash
+cat > .env << 'EOF'
+# ============ 必须修改 ============
+# Headscale 对外访问地址（改成你的真实域名或公网 IP + 端口）
+HEADSCALE_SERVER_URL=http://你的公网IP:8080
+
+# ============ 可选修改 ============
+# 镜像版本（默认 latest）
+AE_VERSION=latest
+BACKEND_VERSION=latest
+NGINX_VERSION=latest
+
+# 端口映射（默认值如下，按需修改）
+WEB_PORT=80
+HS_PORT=8080
+HS_STUN_PORT=3478
+
+# 数据库（无特殊需求保持默认）
+POSTGRES_DB=headscale_admin
+POSTGRES_USER=headscale_admin
+POSTGRES_PASSWORD=HsAdmin2026PG
+
+# Tailnet 的 MagicDNS 域名
+HEADSCALE_DNS_DOMAIN=hs.admin.pro
+
+# 管理面板 JWT 密钥（生产环境建议替换为随机字符串）
+SECRET_KEY=headscale-admin-secret-2026
+
+# 日志级别: trace, debug, info, warn, error
+HEADSCALE_LOG_LEVEL=info
+EOF
+```
+
+> **最重要的一项**：`HEADSCALE_SERVER_URL` 必须改成你的服务器公网地址，Tailscale 客户端通过这个地址连接 Headscale。
+
+#### 第三步：启动
+
+```bash
+docker compose up -d
+```
+
+首次启动会自动拉取以下镜像：
+
+| 镜像 | 说明 |
+|------|------|
+| `postgres:16-alpine` | PostgreSQL 数据库 |
+| `chenzeshi/headscale-admin-ae` | Headscale 控制服务器（AE 增强版） |
+| `chenzeshi/headscale-admin-backend` | 管理面板后端（FastAPI） |
+| `chenzeshi/headscale-admin-nginx` | 前端界面 + Nginx 反向代理 |
+
+启动顺序由 Docker Compose 自动管理（PostgreSQL → Headscale → 后端 → Nginx），每一层都有健康检查，前序服务就绪后才会启动下一个。
+
+#### 第四步：验证
+
+```bash
+docker compose ps   # 应全部显示 healthy
+```
+
+全部就绪后访问：
+
+| 地址 | 用途 |
+|------|------|
+| `http://你的IP` | 管理面板 Web 界面 |
+| `http://你的IP:8080` | Headscale API（客户端连接地址） |
+
+#### 第五步：初始化管理员
+
+浏览器打开 `http://你的IP`，进入注册页面。**第一个注册的用户自动成为管理员**（之后注册入口关闭）。
+
+#### 防火墙端口
+
+确保以下端口已放行：
+
+| 端口 | 协议 | 用途 |
+|------|------|------|
+| 80 | TCP | Web 管理面板 |
+| 8080 | TCP | Headscale API + Noise 协议 |
+| 3478 | UDP | STUN（内嵌 DERP 中继） |
+
+#### 常用运维命令
+
+```bash
+# 停止所有服务
+docker compose down
+
+# 更新镜像并重启
+docker compose pull && docker compose up -d
+
+# 查看日志
+docker compose logs -f --tail=50
+
+# 数据备份（PostgreSQL）
+docker exec hs-postgres pg_dump -U headscale_admin headscale_admin > backup.sql
+
+# 手动创建 API Key
+docker exec hs-headscale headscale apikey create
+```
+
+#### 数据持久化
+
+所有数据通过 Docker Volume 持久化，`docker compose down` 不会丢失数据：
+
+- `postgres-data` — 数据库
+- `headscale-data` — Headscale 运行数据 + API Key
+
+如需完全重置，执行 `docker compose down -v` 删除 Volume（**数据不可恢复**）。
+
+---
+
+### 方式二：Docker 单容器部署
+
+适用于已有 PostgreSQL 数据库或 Headscale 实例，只需要部署部分组件的场景。
+
+#### 前置条件
+
+- 已有 PostgreSQL 数据库
+- Docker 已安装
+
+#### 2.1 只部署 Headscale AE
+
+如果你只需要增强版 Headscale（支持管理面板的扩展表），不需要管理面板：
+
+```bash
+docker run -d \
+  --name hs-headscale \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 3478:3478/udp \
+  -v headscale-data:/var/lib/headscale \
+  -e HEADSCALE_SERVER_URL=http://你的公网IP:8080 \
+  -e HEADSCALE_DNS_DOMAIN=hs.admin.pro \
+  -e DB_HOST=你的数据库IP \
+  -e DB_PORT=5432 \
+  -e DB_NAME=headscale_admin \
+  -e DB_USER=headscale_admin \
+  -e DB_PASS=你的数据库密码 \
+  chenzeshi/headscale-admin-ae:latest
+```
+
+你也可以挂载自定义配置文件跳过环境变量模板渲染：
+
+```bash
+docker run -d \
+  --name hs-headscale \
+  -p 8080:8080 \
+  -p 3478:3478/udp \
+  -v headscale-data:/var/lib/headscale \
+  -v /your/path/config.yaml:/etc/headscale/config.yaml \
+  chenzeshi/headscale-admin-ae:latest
+```
+
+#### 2.2 只部署管理面板（后端 + 前端）
+
+已有 Headscale AE 和 PostgreSQL 运行中，只加装管理面板：
+
+```bash
+# 创建 Docker 网络
+docker network create hs-net
+
+# 后端
+docker run -d \
+  --name hs-admin-backend \
+  --network hs-net \
+  --restart unless-stopped \
+  -e HEADSCALE_URL=http://你的headscale地址:8080 \
+  -e DB_HOST=你的数据库IP \
+  -e DB_PORT=5432 \
+  -e DB_NAME=headscale_admin \
+  -e DB_USER=headscale_admin \
+  -e DB_PASS=你的数据库密码 \
+  -e SECRET_KEY=你的JWT密钥 \
+  -e API_KEY_FILE=/data/headscale/api.key \
+  -v headscale-data:/data/headscale:ro \
+  chenzeshi/headscale-admin-backend:latest
+
+# 前端（Nginx）
+docker run -d \
+  --name hs-nginx \
+  --network hs-net \
+  --restart unless-stopped \
+  -p 80:80 \
+  chenzeshi/headscale-admin-nginx:latest
+```
+
+> **注意**：Nginx 容器内置的反向代理配置通过容器名 `admin-backend` 和 `headscale` 连接后端和 Headscale。如果你的容器名不同，需要自定义 nginx.conf 并挂载覆盖。
+
+#### 2.3 环境变量参考
+
+**Headscale AE 容器：**
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `HEADSCALE_SERVER_URL` | Headscale 对外访问地址 | `http://127.0.0.1:8080` |
+| `HEADSCALE_DNS_DOMAIN` | MagicDNS 域名 | `hs.admin.pro` |
+| `HEADSCALE_LOG_LEVEL` | 日志级别 | `info` |
+| `DB_HOST` | PostgreSQL 主机 | — |
+| `DB_PORT` | PostgreSQL 端口 | `5432` |
+| `DB_NAME` | 数据库名 | — |
+| `DB_USER` | 数据库用户 | — |
+| `DB_PASS` | 数据库密码 | — |
+
+**管理后端容器：**
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `HEADSCALE_URL` | Headscale API 内网地址 | `http://headscale:8080` |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASS` | 数据库连接 | — |
+| `DATABASE_URL` | 完整 DSN（与分离参数二选一） | — |
+| `SECRET_KEY` | JWT 签名密钥 | `change-me` |
+| `API_KEY_FILE` | Headscale API Key 文件路径 | `/data/headscale/api.key` |
+
+---
+
+### 方式三：裸应用部署
+
+不使用 Docker，直接在服务器上安装所有组件。适合需要完全控制每个组件或开发调试的场景。
+
+#### 前置要求
+
+- Linux 服务器（Ubuntu 22/24、Debian 12+）
 - Python 3.13+
 - Node.js 18+ & npm
 - Nginx
-- [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE)（修改版 headscale，需部署在同一服务器）
+- PostgreSQL 14+（或 SQLite）
+- Go 1.22+（编译 Headscale AE）
 
-#### 1. 部署后端
+#### 3.1 部署 Headscale AE
 
 ```bash
-# 克隆仓库
-git clone https://github.com/chen1749144759/Headscale-Admin-Reforged.git
-cd Headscale-Admin-Reforged/backend
+# 克隆并编译
+git clone https://github.com/chen1749144759/Headscale-Admin-AE.git
+cd Headscale-Admin-AE
 
-# 创建虚拟环境并安装依赖
-python3.13 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+go build -trimpath \
+  -ldflags="-s -w -X github.com/juanfont/headscale/hscontrol/types.Version=v0.28.1" \
+  -o headscale ./cmd/headscale
 
-# 启动后端服务（默认端口 5175）
-uvicorn main:app --host 0.0.0.0 --port 5175
+# 安装
+sudo mv headscale /usr/local/bin/
+sudo mkdir -p /etc/headscale /var/lib/headscale
+
+# 编辑配置（参考 config-example.yaml）
+sudo cp config-example.yaml /etc/headscale/config.yaml
+sudo vim /etc/headscale/config.yaml
 ```
 
-**systemd 服务示例：**
+关键配置项需要修改：
 
-```ini
+```yaml
+server_url: http://你的公网IP:8080
+listen_addr: 0.0.0.0:8080         # 生产环境改为 0.0.0.0
+database:
+  type: postgres                    # 或 sqlite
+  postgres:
+    host: 127.0.0.1
+    port: 5432
+    name: headscale_admin
+    user: headscale_admin
+    pass: 你的密码
+policy:
+  mode: database                    # 必须为 database
+```
+
+创建 systemd 服务：
+
+```bash
+sudo tee /etc/systemd/system/headscale.service << 'EOF'
 [Unit]
-Description=Headscale Admin Reforged Backend
-After=network.target
+Description=Headscale Admin AE
+After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=headscale-admin
-WorkingDirectory=/opt/Headscale-Admin-Reforged/backend
-ExecStart=/opt/Headscale-Admin-Reforged/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 5175
+ExecStart=/usr/local/bin/headscale serve -c /etc/headscale/config.yaml
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable --now headscale
 ```
 
-#### 2. 构建并部署前端
+创建 API Key：
 
 ```bash
-cd Headscale-Admin-Reforged/frontend
+headscale apikey create
+# 记下输出的 key，后面配置后端要用
+```
 
-# 安装依赖并构建
+#### 3.2 部署管理面板后端
+
+```bash
+git clone https://github.com/chen1749144759/Headscale-Admin-Reforged.git
+cd Headscale-Admin-Reforged
+
+# 创建虚拟环境
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-prod.txt
+```
+
+创建后端配置文件 `config.yaml`：
+
+```yaml
+server_url:
+  headscale: http://127.0.0.1:8080
+bearer_token: "上一步创建的 API Key"
+server_net: eth0
+database:
+  postgresql:
+    dsn: "host=127.0.0.1 port=5432 dbname=headscale_admin user=headscale_admin password=你的密码"
+secret_key: "你的JWT密钥"
+```
+
+创建 systemd 服务：
+
+```bash
+sudo tee /etc/systemd/system/headscale-admin.service << 'EOF'
+[Unit]
+Description=Headscale Admin Backend
+After=network.target headscale.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/Headscale-Admin-Reforged
+ExecStart=/opt/Headscale-Admin-Reforged/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 5175
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable --now headscale-admin
+```
+
+#### 3.3 构建并部署前端
+
+```bash
+cd Headscale-Admin-Reforged/web
+
 npm install
 npm run build
-```
 
-将构建产物（`dist/`）部署到 Nginx：
-
-```bash
+# 复制构建产物
+sudo mkdir -p /var/www/headscale-admin
 sudo cp -r dist/* /var/www/headscale-admin/
 ```
 
-#### 3. 配置 Nginx
+#### 3.4 配置 Nginx
 
-```nginx
+```bash
+sudo tee /etc/nginx/conf.d/headscale-admin.conf << 'NGINX'
+map $http_upgrade $connection_upgrade {
+    default      keep-alive;
+    'websocket'  upgrade;
+    ''           close;
+}
+
 server {
-    listen 5174;
+    listen 80;
     server_name _;
 
     root /var/www/headscale-admin;
     index index.html;
 
-    # Vue Router history 模式
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # API 反向代理
+    # API 反向代理 → 后端
     location /api/ {
         proxy_pass http://127.0.0.1:5175;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 30;
+        proxy_read_timeout 120;
+    }
+
+    # Headscale 协议反向代理
+    location ~ ^/(health|oidc|windows|apple|key|derp|bootstrap-dns|swagger|ts2021|machine) {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $server_name;
+        proxy_buffering off;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+    }
+
+    # SPA 路由 fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 静态资源缓存
+    location /assets/ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
     }
 }
-```
+NGINX
 
-```bash
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-#### 4. 访问面板
+#### 3.5 访问面板
 
-打开浏览器访问 `http://<your-server-ip>:5174`
+打开浏览器访问 `http://你的IP`，注册第一个管理员账户。
 
-### 配置说明
+---
 
-| 配置项 | 说明 | 位置 |
-|--------|------|------|
-| 后端端口 | 默认 `5175` | uvicorn 启动参数 |
-| 前端端口 | 默认 `5174` | Nginx 配置 |
-| Headscale 地址 | headscale HTTP API 地址 | 面板「系统设置」页 |
-| API Key | headscale API 密钥 | 面板「系统设置」页，支持自动刷新 |
-| 数据库 | 共享 headscale 的 SQLite/PostgreSQL | 后端配置文件 |
+## 客户端连接
 
-### 路线图
+部署完成后，在需要组网的设备上安装 Tailscale 客户端并指向你的 Headscale：
 
-- [ ] Docker Compose 一键部署
+```bash
+# Linux
+tailscale up --login-server=http://你的公网IP:8080
+
+# Windows / macOS
+# 在 Tailscale 客户端设置中将 Login Server 改为你的地址
+```
+
+连接成功后可在管理面板上查看和管理设备。
+
+---
+
+## 相关项目
+
+| 项目 | 说明 |
+|------|------|
+| [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) | 本项目依赖的增强版 headscale |
+| [Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) | 原版项目（arounyf） |
+| [headscale](https://github.com/juanfont/headscale) | headscale 官方项目 |
+
+## 路线图
+
+- [x] Docker Compose 一键部署
 - [ ] 深色/浅色模式切换
 - [ ] 仪表盘图表（流量趋势、节点活跃度）
 - [ ] 多语言 i18n 支持（当前仅中文 UI）
 - [ ] OIDC / SSO 集成
 - [ ] 移动端响应式优化
 
-### 相关项目
-
-| 项目 | 说明 |
-|------|------|
-| [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) | 本项目依赖的修改版 headscale |
-| [Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) | 原版项目（arounyf） |
-| [headscale](https://github.com/juanfont/headscale) | headscale 官方项目 |
-
-### 参与贡献
+## 参与贡献
 
 欢迎提交 Issue 和 Pull Request。在提交 PR 之前，请确保：
 
@@ -243,7 +590,7 @@ sudo nginx -t && sudo systemctl reload nginx
 2. 后端接口保持向后兼容
 3. 提交信息清晰描述变更内容
 
-### 许可证
+## 许可证
 
 本项目基于 [MIT License](LICENSE) 开源。
 
@@ -259,7 +606,7 @@ The original project was a monolithic application built with Flask + Jinja2. Thi
 
 ### Credits & Origin
 
-This project is forked from [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) tag 4.0.0. Special thanks to **arounyf** for the original work. The Reforged edition preserves the core feature set while completely reimplementing the technical architecture and user interface.
+This project is forked from [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) tag 4.0.0. Special thanks to **arounyf** for the original work.
 
 ### Tech Stack
 
@@ -268,73 +615,43 @@ This project is forked from [arounyf/Headscale-Admin-Pro](https://github.com/aro
 | Backend | Python 3.13 + FastAPI + Uvicorn |
 | Frontend | Vue 3 + Vite + Element Plus + Pinia + Vue Router 4 |
 | Authentication | JWT + native bcrypt (Python 3.13 + bcrypt 5.x compatible) |
-| Database | Shares headscale's SQLite / PostgreSQL directly (extended users table) |
-| API Proxy | Bearer Token to headscale HTTP API, auto-refresh via `headscale apikey create` |
+| Database | PostgreSQL 16 (Docker) / SQLite (local dev) |
+| Headscale | [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) (enhanced edition) |
 
-### Architecture
+### Quick Start (Docker Compose)
 
-```
-                          ┌─────────────────────────────────┐
-                          │           Browser               │
-                          └──────────────┬──────────────────┘
-                                         │
-                                         ▼
-                          ┌─────────────────────────────────┐
-                          │     Nginx (port 5174)           │
-                          │  ┌───────────┬────────────┐     │
-                          │  │ Vue SPA   │ /api/*     │     │
-                          │  │ Static    │ Reverse    │     │
-                          │  │ Files     │ Proxy      │     │
-                          │  └───────────┴─────┬──────┘     │
-                          └────────────────────┼────────────┘
-                                               │
-                                               ▼
-                          ┌─────────────────────────────────┐
-                          │   FastAPI + Uvicorn (port 5175) │
-                          │          REST API Server        │
-                          └──────┬──────────────────┬───────┘
-                                 │                  │
-                                 ▼                  ▼
-                    ┌────────────────────┐  ┌───────────────┐
-                    │  Headscale API     │  │  SQLite /     │
-                    │  (port 18919)      │  │  PostgreSQL   │
-                    └────────────────────┘  └───────────────┘
+```bash
+# 1. Download docker-compose.yml
+mkdir -p ~/headscale-admin && cd ~/headscale-admin
+curl -fsSL -o docker-compose.yml \
+  https://raw.githubusercontent.com/chen1749144759/Headscale-Admin-Reforged/main/docker/docker-compose.yml
+
+# 2. Create .env (MUST change HEADSCALE_SERVER_URL)
+cat > .env << 'EOF'
+HEADSCALE_SERVER_URL=http://YOUR_PUBLIC_IP:8080
+EOF
+
+# 3. Launch
+docker compose up -d
+
+# 4. Check status
+docker compose ps
 ```
 
-### Key Changes from Original 4.0.0
+Open `http://YOUR_IP` in your browser. The first registered user becomes admin.
 
-| # | Area | Original 4.0.0 | Reforged |
-|---|------|----------------|----------|
-| 1 | Architecture | Flask + Jinja2 monolith | Frontend-backend separation (SPA + REST API) |
-| 2 | Backend | Flask | FastAPI + Pydantic models + proper parameter binding |
-| 3 | Frontend | Jinja2 server-rendered | Vue 3 SPA + Element Plus component library |
-| 4 | UI Design | Original styling | Dark glassmorphism (deep blue sidebar, glass cards, indigo accent) |
-| 5 | Auth library | passlib | Native bcrypt (Python 3.13 compatibility fix) |
-| 6 | PreAuthKey | Wrong user field type | Fixed to uint64 ID |
-| 7 | Data handling | — | Correctly parses headscale API nested response structures |
-| 8 | Settings | — | Lock/unlock mode + password confirmation for sensitive operations |
-| 9 | ACL editor | — | Full-height dark editor with line numbers and JSON formatting |
-| 10 | Dashboard | — | Real-time CPU/memory/traffic monitoring with correct API field mapping |
-
-### UI Highlights
-
-- **Login page**: Left-right split layout + puzzle slider CAPTCHA
-- **Standalone registration page**: Dedicated registration flow
-- **Sidebar**: Deep blue tone (`#0d1117`)
-- **Card components**: `backdrop-filter: blur` glassmorphism effect
-- **Accent color**: Indigo (`#4f46e5`)
+For detailed deployment options (Docker single-container, bare-metal), please refer to the [Chinese deployment guide](#部署指南) above.
 
 ### Features
 
-- **Group management** — Headscale user namespace management, node quota, auto-generated ACL rule templates, visual ACL group definition (group:xxx) editor
-- **Node management** — List, search, filter by group, rename, delete, tag management (forcedTags), move between groups
-- **Route management** — Subnet route advertisement list, approve/revoke, visual autoApprovers editor, Exit Node management
-- **ACL rule editor** — HuJSON support, formatting, line numbers, auto-sync to Headscale API in database mode
-- **Preauthkey management** — Create (expiry/reusable/ephemeral), delete, one-click copy
-- **System settings** — Headscale connection, API key, registration policy, security lock
-- **Operation logs** — Paginated audit trail with human-readable machine/group names (not IDs)
-- **Deployment guide** — Built-in deployment instructions page
-- **Profile & password** — Edit profile and change password
+- **Dashboard** — Real-time CPU/memory/traffic monitoring, node statistics
+- **Group management** — Headscale user namespace management, node quota, ACL rule templates
+- **Node management** — List, search, filter, rename, delete, tag management (forcedTags)
+- **Route management** — Subnet routes, approve/revoke, autoApprovers editor, Exit Nodes
+- **ACL rule editor** — HuJSON support, formatting, line numbers, database mode sync
+- **Preauthkey management** — Create/delete, one-click copy
+- **System settings** — Connection config, API key, registration policy, security lock
+- **Operation logs** — Paginated audit trail with human-readable names
 - **Health monitoring** — Real-time headscale connection status in header bar
 
 ### Screenshots
@@ -347,137 +664,13 @@ This project is forked from [arounyf/Headscale-Admin-Pro](https://github.com/aro
 |:---:|:---:|
 | ![Group Management](docs/screenshots/分组.png) | ![ACL Rules](docs/screenshots/ACL.png) |
 
-| Route Management | Preauthkeys |
-|:---:|:---:|
-| ![Route Management](docs/screenshots/路由.png) | ![Preauthkeys](docs/screenshots/预认证.png) |
-
-### Quick Start
-
-#### Prerequisites
-
-- Python 3.13+
-- Node.js 18+ & npm
-- Nginx
-- [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) (modified headscale binary, must run on the same server)
-
-#### 1. Deploy the Backend
-
-```bash
-# Clone the repository
-git clone https://github.com/chen1749144759/Headscale-Admin-Reforged.git
-cd Headscale-Admin-Reforged/backend
-
-# Set up virtual environment and install dependencies
-python3.13 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Start the backend (default port 5175)
-uvicorn main:app --host 0.0.0.0 --port 5175
-```
-
-**systemd service example:**
-
-```ini
-[Unit]
-Description=Headscale Admin Reforged Backend
-After=network.target
-
-[Service]
-Type=simple
-User=headscale-admin
-WorkingDirectory=/opt/Headscale-Admin-Reforged/backend
-ExecStart=/opt/Headscale-Admin-Reforged/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 5175
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-#### 2. Build and Deploy the Frontend
-
-```bash
-cd Headscale-Admin-Reforged/frontend
-
-# Install dependencies and build
-npm install
-npm run build
-```
-
-Deploy the build output (`dist/`) to Nginx:
-
-```bash
-sudo cp -r dist/* /var/www/headscale-admin/
-```
-
-#### 3. Configure Nginx
-
-```nginx
-server {
-    listen 5174;
-    server_name _;
-
-    root /var/www/headscale-admin;
-    index index.html;
-
-    # Vue Router history mode
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # API reverse proxy
-    location /api/ {
-        proxy_pass http://127.0.0.1:5175;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-```bash
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-#### 4. Access the Panel
-
-Open your browser and navigate to `http://<your-server-ip>:5174`
-
-### Configuration
-
-| Setting | Description | Location |
-|---------|-------------|----------|
-| Backend port | Default `5175` | uvicorn startup args |
-| Frontend port | Default `5174` | Nginx config |
-| Headscale URL | Headscale HTTP API address | Panel "System Settings" page |
-| API Key | Headscale API key | Panel "System Settings" page (supports auto-refresh) |
-| Database | Shares headscale's SQLite/PostgreSQL | Backend config file |
-
-### Roadmap
-
-- [ ] Docker Compose one-click deployment
-- [ ] Dark / Light mode toggle
-- [ ] Dashboard charts (traffic trends, node activity)
-- [ ] Multi-language i18n support (currently Chinese-only UI)
-- [ ] OIDC / SSO integration
-- [ ] Mobile responsive improvements
-
 ### Related Projects
 
 | Project | Description |
 |---------|-------------|
-| [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) | Modified headscale binary required by this project |
+| [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) | Enhanced headscale binary required by this project |
 | [Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) | Original project by arounyf |
 | [headscale](https://github.com/juanfont/headscale) | Official headscale project |
-
-### Contributing
-
-Issues and Pull Requests are welcome. Before submitting a PR, please make sure:
-
-1. The code builds successfully (frontend `npm run build` with no errors)
-2. Backend API changes remain backward compatible
-3. Commit messages clearly describe the changes
 
 ### License
 
