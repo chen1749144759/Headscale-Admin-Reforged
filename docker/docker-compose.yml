@@ -11,7 +11,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-headscale_admin}
       POSTGRES_USER: ${POSTGRES_USER:-headscale_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-HsAdmin@2026PG}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-HsAdmin2026PG}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -28,8 +28,6 @@ services:
     container_name: hs-headscale
     restart: unless-stopped
     volumes:
-      - ./headscale/config.yaml.tmpl:/etc/headscale/config.yaml.tmpl:ro
-      - ./headscale/entrypoint.sh:/entrypoint.sh:ro
       - headscale-data:/var/lib/headscale
     ports:
       - "${HS_PORT:-8080}:8080"          # HTTP API + Noise 协议
@@ -42,8 +40,8 @@ services:
       - DB_PORT=5432
       - DB_NAME=${POSTGRES_DB:-headscale_admin}
       - DB_USER=${POSTGRES_USER:-headscale_admin}
-      - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin@2026PG}
-    entrypoint: ["sh", "/entrypoint.sh"]
+      - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin2026PG}
+    entrypoint: ["/entrypoint.sh"]
     networks:
       - hs-net
     depends_on:
@@ -65,7 +63,11 @@ services:
     restart: unless-stopped
     environment:
       - HEADSCALE_URL=http://headscale:8080
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-headscale_admin}:${POSTGRES_PASSWORD:-HsAdmin@2026PG}@postgres:5432/${POSTGRES_DB:-headscale_admin}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB:-headscale_admin}
+      - DB_USER=${POSTGRES_USER:-headscale_admin}
+      - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin2026PG}
       - SECRET_KEY=${SECRET_KEY:-headscale-admin-secret-2026}
       - API_KEY_FILE=/data/headscale/api.key
     volumes:

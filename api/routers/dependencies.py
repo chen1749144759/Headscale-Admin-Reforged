@@ -63,7 +63,24 @@ def save_config(updates: dict):
 CFG = load_config()
 
 # 全局配置 — 环境变量优先，config.yaml 兜底
-DATABASE_DSN = os.environ.get('DATABASE_URL') or CFG.get('database', {}).get('postgresql', {}).get('dsn', '')
+def _build_database_dsn():
+    """构建数据库 DSN，支持分离参数或完整 URL"""
+    # 优先使用完整 URL
+    url = os.environ.get('DATABASE_URL')
+    if url:
+        return url
+    # 尝试从分离的环境变量构建
+    host = os.environ.get('DB_HOST')
+    if host:
+        port = os.environ.get('DB_PORT', '5432')
+        name = os.environ.get('DB_NAME', 'headscale_admin')
+        user = os.environ.get('DB_USER', 'headscale_admin')
+        password = os.environ.get('DB_PASS', '')
+        return f"host={host} port={port} dbname={name} user={user} password={password}"
+    # 兜底到 config.yaml
+    return CFG.get('database', {}).get('postgresql', {}).get('dsn', '')
+
+DATABASE_DSN = _build_database_dsn()
 SERVER_HOST = os.environ.get('HEADSCALE_URL') or CFG.get('server_url', {}).get('headscale', 'http://127.0.0.1:8080')
 BEARER_TOKEN = os.environ.get('HEADSCALE_API_KEY') or CFG.get('bearer_token', '')
 SERVER_URL = CFG.get('server_url', {}).get('headscale', '')
