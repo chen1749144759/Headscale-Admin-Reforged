@@ -139,6 +139,10 @@ cat > .env << 'EOF'
 # Headscale 对外访问地址（改成你的真实域名或公网 IP + 端口）
 HEADSCALE_SERVER_URL=http://你的公网IP:8080
 
+# ============ 镜像加速（国内用户） ============
+# 如果无法访问 Docker Hub，取消下一行注释即可走镜像加速
+# REGISTRY_MIRROR=docker.1ms.run/
+
 # ============ 可选修改 ============
 # 镜像版本（默认 latest）
 AE_VERSION=latest

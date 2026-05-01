@@ -1,11 +1,15 @@
 # Headscale Admin - Docker Compose 一键部署
 # 启动: docker compose up -d
 # 停止: docker compose down
+#
+# 国内用户无法访问 Docker Hub 时，在 .env 中设置:
+#   REGISTRY_MIRROR=docker.1ms.run/
+# 即可自动走镜像加速，无需修改本文件。
 
 services:
   # ==================== PostgreSQL 数据库 ====================
   postgres:
-    image: postgres:16-alpine
+    image: ${REGISTRY_MIRROR:-}postgres:16-alpine
     container_name: hs-postgres
     restart: unless-stopped
     environment:
@@ -24,7 +28,7 @@ services:
 
   # ==================== Headscale 控制服务器 (AE) ====================
   headscale:
-    image: chenzeshi/headscale-admin-ae:${AE_VERSION:-latest}
+    image: ${REGISTRY_MIRROR:-}chenzeshi/headscale-admin-ae:${AE_VERSION:-latest}
     container_name: hs-headscale
     restart: unless-stopped
     volumes:
@@ -56,7 +60,7 @@ services:
 
   # ==================== 管理面板后端 (FastAPI) ====================
   admin-backend:
-    image: chenzeshi/headscale-admin-backend:${BACKEND_VERSION:-latest}
+    image: ${REGISTRY_MIRROR:-}chenzeshi/headscale-admin-backend:${BACKEND_VERSION:-latest}
     container_name: hs-admin-backend
     restart: unless-stopped
     environment:
@@ -84,7 +88,7 @@ services:
 
   # ==================== Nginx 前端 + 反向代理 ====================
   nginx:
-    image: chenzeshi/headscale-admin-nginx:${NGINX_VERSION:-latest}
+    image: ${REGISTRY_MIRROR:-}chenzeshi/headscale-admin-nginx:${NGINX_VERSION:-latest}
     container_name: hs-nginx
     restart: unless-stopped
     ports:
