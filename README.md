@@ -164,6 +164,10 @@ POSTGRES_PASSWORD=HsAdmin2026PG
 # Tailnet 的 MagicDNS 域名
 HEADSCALE_DNS_DOMAIN=hs.admin.pro
 
+# 内嵌 DERP 中继（客户端连接 DERP 的公网 IP 或域名，留空则使用 server_url 地址）
+DERP_DOMAIN=
+DERP_PORT=3478
+
 # 管理面板 JWT 密钥（生产环境建议替换为随机字符串）
 SECRET_KEY=headscale-admin-secret-2026
 

@@ -35,11 +35,13 @@ services:
       - headscale-data:/var/lib/headscale
     ports:
       - "${HS_PORT:-8080}:8080"          # HTTP API + Noise 协议
-      - "${HS_STUN_PORT:-3478}:3478/udp" # STUN (内嵌 DERP)
+      - "${HS_STUN_PORT:-3478}:${DERP_PORT:-3478}/udp" # STUN (内嵌 DERP)
     environment:
       - HEADSCALE_SERVER_URL=${HEADSCALE_SERVER_URL:-http://127.0.0.1:8080}
       - HEADSCALE_DNS_DOMAIN=${HEADSCALE_DNS_DOMAIN:-hs.admin.pro}
       - HEADSCALE_LOG_LEVEL=${HEADSCALE_LOG_LEVEL:-info}
+      - DERP_DOMAIN=${DERP_DOMAIN:-}
+      - DERP_PORT=${DERP_PORT:-3478}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${POSTGRES_DB:-headscale_admin}
