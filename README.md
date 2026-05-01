@@ -137,6 +137,7 @@ curl -fsSL -o docker-compose.yml \
 cat > .env << 'EOF'
 # ============ 必须修改 ============
 # Headscale 对外访问地址（改成你的真实域名或公网 IP + 端口）
+# 注意：端口必须和下方 HS_PORT 保持一致
 HEADSCALE_SERVER_URL=http://你的公网IP:8080
 
 # ============ 镜像加速（国内用户） ============
@@ -150,6 +151,7 @@ BACKEND_VERSION=latest
 NGINX_VERSION=latest
 
 # 端口映射（默认值如下，按需修改）
+# 修改 HS_PORT 后，上方 HEADSCALE_SERVER_URL 的端口也要同步修改
 WEB_PORT=80
 HS_PORT=8080
 HS_STUN_PORT=3478
@@ -170,7 +172,7 @@ HEADSCALE_LOG_LEVEL=info
 EOF
 ```
 
-> **最重要的一项**：`HEADSCALE_SERVER_URL` 必须改成你的服务器公网地址，Tailscale 客户端通过这个地址连接 Headscale。
+> **最重要的一项**：`HEADSCALE_SERVER_URL` 必须改成你的服务器公网地址，Tailscale 客户端通过这个地址连接 Headscale。如果修改了 `HS_PORT`（如改为 60090），`HEADSCALE_SERVER_URL` 的端口也必须同步修改（如 `http://你的IP:60090`）。
 
 #### 第三步：启动
 
