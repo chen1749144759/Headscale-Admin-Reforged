@@ -154,7 +154,6 @@ NGINX_VERSION=latest
 # 修改 HS_PORT 后，上方 HEADSCALE_SERVER_URL 的端口也要同步修改
 WEB_PORT=80
 HS_PORT=8080
-HS_STUN_PORT=3478
 
 # 数据库（无特殊需求保持默认）
 POSTGRES_DB=headscale_admin
