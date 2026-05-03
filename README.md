@@ -622,3 +622,9 @@ DERP 中继在一键部署时自动配置。自定义端口、故障排查和安
 ## 许可证
 
 本项目基于 [MIT License](LICENSE) 开源。
+
+## 打赏
+
+如果这个项目对你有帮助，欢迎请作者喝杯咖啡 :)
+
+<img src="docs/screenshots/donate.jpg" width="300" />
