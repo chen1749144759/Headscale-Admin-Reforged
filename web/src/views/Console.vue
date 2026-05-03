@@ -90,8 +90,8 @@
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>
                 <span>上传</span>
               </div>
-              <div class="traffic-num">{{ formatBytes(sysInfo.netSent) }}</div>
-              <div class="traffic-rate" v-if="trafficRate.upRate">{{ formatBytes(trafficRate.upRate) }}/s</div>
+              <div class="traffic-num">{{ formatBytes(traffic.netSent) }}</div>
+              <div class="traffic-rate" v-if="traffic.upRate">{{ formatBytes(traffic.upRate) }}/s</div>
             </div>
             <div class="traffic-divider"></div>
             <div class="traffic-half download">
@@ -99,8 +99,8 @@
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg>
                 <span>下载</span>
               </div>
-              <div class="traffic-num">{{ formatBytes(sysInfo.netRecv) }}</div>
-              <div class="traffic-rate" v-if="trafficRate.downRate">{{ formatBytes(trafficRate.downRate) }}/s</div>
+              <div class="traffic-num">{{ formatBytes(traffic.netRecv) }}</div>
+              <div class="traffic-rate" v-if="traffic.downRate">{{ formatBytes(traffic.downRate) }}/s</div>
             </div>
           </div>
 
@@ -110,11 +110,11 @@
             <div class="mini-chart" ref="chartRef">
               <svg :viewBox="`0 0 ${chartW} ${chartH}`" preserveAspectRatio="none" width="100%" :height="chartH">
                 <!-- 上传曲线 -->
-                <polyline :points="uploadPoints" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linejoin="round" />
-                <polyline :points="uploadAreaPoints" fill="rgba(16,185,129,0.08)" stroke="none" />
+                <path :d="uploadAreaPoints" fill="rgba(16,185,129,0.08)" stroke="none" />
+                <path :d="uploadPoints" fill="none" stroke="#10b981" stroke-width="1" stroke-linecap="round" />
                 <!-- 下载曲线 -->
-                <polyline :points="downloadPoints" fill="none" stroke="#4f46e5" stroke-width="1.5" stroke-linejoin="round" />
-                <polyline :points="downloadAreaPoints" fill="rgba(79,70,229,0.08)" stroke="none" />
+                <path :d="downloadAreaPoints" fill="rgba(79,70,229,0.08)" stroke="none" />
+                <path :d="downloadPoints" fill="none" stroke="#4f46e5" stroke-width="1" stroke-linecap="round" />
               </svg>
               <div class="chart-legend">
                 <span class="legend-item"><span class="legend-dot" style="background:#10b981"></span>上传</span>
@@ -159,50 +159,62 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
+import { ref, computed, onMounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { getSystemInfo, getSystemTraffic, getNodes, getUsers, getLogs } from '@/api'
+import { useTrafficStore, startTrafficSampling, MAX_TRAFFIC_SAMPLES } from '@/stores/traffic'
+import { getSystemInfo, getNodes, getUsers, getLogs } from '@/api'
 import { Monitor, Cpu, Connection, UserFilled, Key, Setting, Guide, SetUp } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const traffic = useTrafficStore()
 
-const sysInfo = ref({ cpu: 0, memory: 0, memoryUsed: 0, memoryTotal: 0, netSent: 0, netRecv: 0 })
+// 启动全局流量采样（幂等，只会启动一次，页面切走采样不停）
+startTrafficSampling()
+
+const sysInfo = ref({ cpu: 0, memory: 0, memoryUsed: 0, memoryTotal: 0 })
 const internalIps = ref([])
-const trafficRate = ref({ upRate: 0, downRate: 0 })
-let prevTraffic = { sent: 0, recv: 0, time: 0 }
-let trafficTimer = null
 const nodeCount = ref(0)
 const onlineCount = ref(0)
 const userCount = ref(0)
 const recentLogs = ref([])
 
-// 迷你流量图数据（最多保留30个采样点）
-const MAX_SAMPLES = 30
+// 迷你流量图配置
+const MAX_SAMPLES = MAX_TRAFFIC_SAMPLES
 const chartW = 300
 const chartH = 60
-const uploadHistory = ref([])
-const downloadHistory = ref([])
 
 function buildPoints(arr, w, h) {
   if (arr.length < 2) return ''
   const max = Math.max(...arr, 1)
   const step = w / (MAX_SAMPLES - 1)
   const offset = (MAX_SAMPLES - arr.length) * step
-  return arr.map((v, i) => `${(offset + i * step).toFixed(1)},${(h - (v / max) * (h - 4) - 2).toFixed(1)}`).join(' ')
+  const pts = arr.map((v, i) => ({
+    x: offset + i * step,
+    y: h - (v / max) * (h - 4) - 2
+  }))
+  // 平滑贝塞尔曲线
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i - 1], c = pts[i]
+    const cpx = (p.x + c.x) / 2
+    d += ` C ${cpx.toFixed(1)} ${p.y.toFixed(1)}, ${cpx.toFixed(1)} ${c.y.toFixed(1)}, ${c.x.toFixed(1)} ${c.y.toFixed(1)}`
+  }
+  return d
 }
 function buildAreaPoints(arr, w, h) {
   const line = buildPoints(arr, w, h)
   if (!line) return ''
   const step = w / (MAX_SAMPLES - 1)
   const offset = (MAX_SAMPLES - arr.length) * step
-  return `${offset.toFixed(1)},${h} ${line} ${(offset + (arr.length - 1) * step).toFixed(1)},${h}`
+  const lastX = offset + (arr.length - 1) * step
+  return `${line} L ${lastX.toFixed(1)} ${h} L ${offset.toFixed(1)} ${h} Z`
 }
-const uploadPoints = computed(() => buildPoints(uploadHistory.value, chartW, chartH))
-const downloadPoints = computed(() => buildPoints(downloadHistory.value, chartW, chartH))
-const uploadAreaPoints = computed(() => buildAreaPoints(uploadHistory.value, chartW, chartH))
-const downloadAreaPoints = computed(() => buildAreaPoints(downloadHistory.value, chartW, chartH))
+const uploadPoints = computed(() => buildPoints(traffic.upload, chartW, chartH))
+const downloadPoints = computed(() => buildPoints(traffic.download, chartW, chartH))
+const uploadAreaPoints = computed(() => buildAreaPoints(traffic.upload, chartW, chartH))
+const downloadAreaPoints = computed(() => buildAreaPoints(traffic.download, chartW, chartH))
 
 const hsHealthy = computed(() => userStore.systemStatus.headscale_healthy)
 const hsVersion = computed(() => {
@@ -241,13 +253,6 @@ function formatBytes(b) {
   return val.toFixed(1) + ' ' + units[i]
 }
 
-function pushTrafficSample(upRate, downRate) {
-  uploadHistory.value.push(upRate)
-  downloadHistory.value.push(downRate)
-  if (uploadHistory.value.length > MAX_SAMPLES) uploadHistory.value.shift()
-  if (downloadHistory.value.length > MAX_SAMPLES) downloadHistory.value.shift()
-}
-
 onMounted(async () => {
   // 系统信息（CPU/内存/内网IP）
   try {
@@ -260,15 +265,6 @@ onMounted(async () => {
     if (Array.isArray(d.internal_ips)) {
       internalIps.value = d.internal_ips
     }
-  } catch {}
-
-  // 流量数据（独立接口）
-  try {
-    const res = await getSystemTraffic()
-    const d = res.data || {}
-    sysInfo.value.netSent = d.bytes_sent ?? d.net_sent ?? 0
-    sysInfo.value.netRecv = d.bytes_recv ?? d.net_recv ?? 0
-    prevTraffic = { sent: sysInfo.value.netSent, recv: sysInfo.value.netRecv, time: Date.now() }
   } catch {}
 
   // 节点统计
@@ -299,34 +295,6 @@ onMounted(async () => {
       recentLogs.value = res.data || []
     } catch {}
   }
-
-  // 实时流量速率：每5秒刷新 + 推入趋势图
-  trafficTimer = setInterval(async () => {
-    try {
-      const res = await getSystemTraffic()
-      const d = res.data || {}
-      const nowSent = d.bytes_sent ?? d.net_sent ?? 0
-      const nowRecv = d.bytes_recv ?? d.net_recv ?? 0
-      const now = Date.now()
-      if (prevTraffic.time > 0) {
-        const elapsed = (now - prevTraffic.time) / 1000
-        if (elapsed > 0) {
-          const up = Math.max(0, (nowSent - prevTraffic.sent) / elapsed)
-          const down = Math.max(0, (nowRecv - prevTraffic.recv) / elapsed)
-          trafficRate.value.upRate = up
-          trafficRate.value.downRate = down
-          pushTrafficSample(up, down)
-        }
-      }
-      sysInfo.value.netSent = nowSent
-      sysInfo.value.netRecv = nowRecv
-      prevTraffic = { sent: nowSent, recv: nowRecv, time: now }
-    } catch {}
-  }, 5000)
-})
-
-onUnmounted(() => {
-  if (trafficTimer) clearInterval(trafficTimer)
 })
 </script>
 

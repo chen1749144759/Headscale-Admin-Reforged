@@ -1,6 +1,9 @@
 # Headscale Admin AE - Docker 配置模板
 # 此文件由 entrypoint.sh 在容器启动时通过 envsubst 渲染为 config.yaml
 # 所有 ${VAR} 占位符会被替换为环境变量的实际值
+#
+# 用法：docker-compose.yml 通过 volume mount 将本文件挂载到容器
+#   ./config.yaml.tmpl:/etc/headscale/config.yaml.tmpl:ro
 
 server_url: ${HEADSCALE_SERVER_URL}
 
@@ -18,18 +21,10 @@ prefixes:
 
 derp:
   server:
-    enabled: true
-    region_id: 999
-    region_code: headscale
-    region_name: Headscale Embedded DERP
-    stun_listen_addr: 0.0.0.0:${DERP_PORT}
-    domain: ${DERP_DOMAIN}
-    private: true
-    verify_clients: false
-    private_key_path: /var/lib/headscale/derp.key
-  urls:
-    - https://controlplane.tailscale.com/derpmap/default
-  auto_update: false
+    enabled: false
+  urls: []
+  paths:
+    - /etc/headscale/derp.yaml
 
 database:
   type: postgres

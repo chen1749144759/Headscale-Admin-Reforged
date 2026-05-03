@@ -58,6 +58,7 @@ def list_preauthkeys(user: CurrentUser = Depends(get_current_user)):
             'user_name': k.get('user', {}).get('name', ''),
             'reusable': k.get('reusable', False),
             'ephemeral': k.get('ephemeral', False),
+            'used': k.get('used', False),
             'expiration': exp,
             'created_at': created,
         })
@@ -103,11 +104,11 @@ def delete_preauthkey(key_id: str, user: CurrentUser = Depends(get_current_user)
         cur = conn.cursor()
         # 非管理员只能删自己的密钥
         if user.role != 'manager':
-            cur.execute("SELECT user_id FROM pre_auth_keys WHERE id = ?", (key_id,))
+            cur.execute("SELECT user_id FROM pre_auth_keys WHERE id = %s", (key_id,))
             row = cur.fetchone()
             if not row or str(row[0]) != str(user.id):
                 return {'code': 1, 'msg': '无权限删除此密钥'}
-        cur.execute("DELETE FROM pre_auth_keys WHERE id = ?", (key_id,))
+        cur.execute("DELETE FROM pre_auth_keys WHERE id = %s", (key_id,))
         conn.commit()
         record_log(conn, user.id, f'删除预认证密钥 (ID: {key_id})')
         conn.commit()

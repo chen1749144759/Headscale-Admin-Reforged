@@ -8,16 +8,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Headscale Web 管理面板 — 完全重写版**
->
-> A completely rewritten web management panel for [headscale](https://github.com/juanfont/headscale).
 
-[中文](#中文) | [English](#english)
+[English](docs/README_en.md) | [中文](#)
 
 ---
 
-## 中文
-
-### 项目简介
+## 项目简介
 
 **Headscale-Admin-Reforged** 是基于 [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) v4.0.0 的**完全重写**版本。
 
@@ -27,7 +23,7 @@
 
 本项目 fork 自 [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) tag 4.0.0，感谢原作者 **arounyf** 的出色工作。Reforged 版本在保留原项目功能理念的基础上，对技术架构和 UI 进行了完整的重新实现。
 
-### 技术栈
+## 技术栈
 
 | 层级 | 技术 |
 |------|------|
@@ -36,6 +32,7 @@
 | 认证鉴权 | JWT + 原生 bcrypt（兼容 Python 3.13 + bcrypt 5.x） |
 | 数据库 | PostgreSQL 16（Docker 部署）/ SQLite（本地开发） |
 | Headscale | [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE)（增强版，扩展 users 表） |
+| DERP 中继 | 独立 [derper](https://pkg.go.dev/tailscale.com/cmd/derper)，自签名证书自动生成 |
 | API 代理 | Bearer Token 调用 headscale HTTP API，自动创建并刷新 API Key |
 
 ### 架构概览
@@ -64,22 +61,28 @@
                     ┌──────────────────────────────────────────────┐
                     │          PostgreSQL 16 (共享数据库)            │
                     └──────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────┐
+    │   derper (独立 DERP 中继服务器)       │
+    │   STUN :3478/udp  DERP :3479/tcp   │
+    └─────────────────────────────────────┘
 ```
 
-### 功能列表
+## 功能列表
 
-- **控制台仪表盘** — 实时 CPU/内存/流量监控，节点统计
+- **控制台仪表盘** — 实时 CPU/内存/流量监控，平滑流量趋势曲线，节点统计
 - **分组管理** — Headscale 用户命名空间管理、机器配额、ACL 规则模板自动生成
 - **节点管理** — 列表、搜索、按分组筛选、重命名、删除、标签管理（forcedTags）、移动分组
 - **路由管理** — 子网路由通告列表、批准/撤销、autoApprovers 可视化编辑、Exit Node 管理
 - **ACL 规则编辑器** — HuJSON 支持、格式化、行号显示、database 模式自动同步
 - **预授权密钥** — 创建（过期时间/可复用/临时节点）、删除、一键复制
+- **DERP 中继** — 独立 DERP 服务器，自签证书自动生成，零配置部署
 - **系统设置** — headscale 连接配置、API Key 管理、注册策略、安全锁定保护
 - **操作日志** — 分页查看操作记录，日志内容显示机器名/分组名（非 ID）
 - **个人中心** — 资料编辑、密码修改
 - **健康监测** — 顶部栏实时显示 headscale 连接状态
 
-### 截图预览
+## 截图预览
 
 | 控制台 | 用户管理 |
 |:---:|:---:|
@@ -109,7 +112,7 @@
 
 ### 方式一：Docker Compose 一键部署（推荐）
 
-最简单的部署方式，一条命令拉起全部服务（PostgreSQL + Headscale AE + 管理后端 + Nginx 前端）。
+最简单的部署方式，一条命令拉起全部服务（PostgreSQL + Headscale AE + DERP 中继 + 管理后端 + Nginx 前端）。
 
 #### 前置要求
 
@@ -122,60 +125,36 @@
 curl -fsSL https://get.docker.com | sh
 ```
 
-#### 第一步：下载 docker-compose.yml
+#### 第一步：下载部署文件
 
 ```bash
 mkdir -p ~/headscale-admin && cd ~/headscale-admin
 
-curl -fsSL -o docker-compose.yml \
-  https://raw.githubusercontent.com/chen1749144759/Headscale-Admin-Reforged/main/docker/docker-compose.yml
+# 下载 docker-compose.yml 及模板文件
+for f in docker-compose.yml config.yaml.tmpl derp.yaml.tmpl entrypoint.sh .env.example; do
+  curl -fsSL -o "$f" \
+    "https://raw.githubusercontent.com/chen1749144759/Headscale-Admin-Reforged/main/docker/$f"
+done
+chmod +x entrypoint.sh
 ```
 
 #### 第二步：创建 .env 配置文件
 
 ```bash
-cat > .env << 'EOF'
-# ============ 必须修改 ============
-# Headscale 对外访问地址（改成你的真实域名或公网 IP + 端口）
-# 注意：端口必须和下方 HS_PORT 保持一致
-HEADSCALE_SERVER_URL=http://你的公网IP:8080
-
-# ============ 镜像加速（国内用户） ============
-# 如果无法访问 Docker Hub，取消下一行注释即可走镜像加速
-# REGISTRY_MIRROR=docker.1ms.run/
-
-# ============ 可选修改 ============
-# 镜像版本（默认 latest）
-AE_VERSION=latest
-BACKEND_VERSION=latest
-NGINX_VERSION=latest
-
-# 端口映射（默认值如下，按需修改）
-# 修改 HS_PORT 后，上方 HEADSCALE_SERVER_URL 的端口也要同步修改
-WEB_PORT=80
-HS_PORT=8080
-
-# 数据库（无特殊需求保持默认）
-POSTGRES_DB=headscale_admin
-POSTGRES_USER=headscale_admin
-POSTGRES_PASSWORD=HsAdmin2026PG
-
-# Tailnet 的 MagicDNS 域名
-HEADSCALE_DNS_DOMAIN=hs.admin.pro
-
-# 内嵌 DERP 中继（客户端连接 DERP 的公网 IP 或域名，留空则使用 server_url 地址）
-DERP_DOMAIN=
-DERP_PORT=3478
-
-# 管理面板 JWT 密钥（生产环境建议替换为随机字符串）
-SECRET_KEY=headscale-admin-secret-2026
-
-# 日志级别: trace, debug, info, warn, error
-HEADSCALE_LOG_LEVEL=info
-EOF
+cp .env.example .env
 ```
 
-> **最重要的一项**：`HEADSCALE_SERVER_URL` 必须改成你的服务器公网地址，Tailscale 客户端通过这个地址连接 Headscale。如果修改了 `HS_PORT`（如改为 60090），`HEADSCALE_SERVER_URL` 的端口也必须同步修改（如 `http://你的IP:60090`）。
+编辑 `.env`，**至少修改以下两项**：
+
+```bash
+# 必须修改 — Headscale 对外访问地址
+HEADSCALE_SERVER_URL=http://你的公网IP:8080
+
+# 必须修改 — DERP 中继公网地址（通常与上面相同）
+DERP_DOMAIN=你的公网IP
+```
+
+> **最重要的配置**：`HEADSCALE_SERVER_URL` 必须改成你的服务器公网地址，Tailscale 客户端通过这个地址连接 Headscale。如果修改了 `HS_PORT`（如改为 60090），URL 的端口也必须同步修改。
 
 #### 第三步：启动
 
@@ -183,21 +162,16 @@ EOF
 docker compose up -d
 ```
 
-首次启动会自动拉取以下镜像：
+首次启动会自动：
 
-| 镜像 | 说明 |
-|------|------|
-| `postgres:16-alpine` | PostgreSQL 数据库 |
-| `chenzeshi/headscale-admin-ae` | Headscale 控制服务器（AE 增强版） |
-| `chenzeshi/headscale-admin-backend` | 管理面板后端（FastAPI） |
-| `chenzeshi/headscale-admin-nginx` | 前端界面 + Nginx 反向代理 |
-
-启动顺序由 Docker Compose 自动管理（PostgreSQL → Headscale → 后端 → Nginx），每一层都有健康检查，前序服务就绪后才会启动下一个。
+1. 拉取所有镜像（PostgreSQL、Headscale AE、derper、管理后端、Nginx）
+2. 为 DERP 生成自签名 TLS 证书
+3. 按依赖顺序启动所有服务（每一层都有健康检查）
 
 #### 第四步：验证
 
 ```bash
-docker compose ps   # 应全部显示 healthy
+docker compose ps   # 应全部显示 healthy / Up
 ```
 
 全部就绪后访问：
@@ -219,7 +193,10 @@ docker compose ps   # 应全部显示 healthy
 |------|------|------|
 | 80 | TCP | Web 管理面板 |
 | 8080 | TCP | Headscale API + Noise 协议 |
-| 3478 | UDP | STUN（内嵌 DERP 中继） |
+| 3478 | UDP | STUN（NAT 穿透打洞） |
+| 3479 | TCP | DERP 中继（TLS 加密） |
+
+> DERP 中继相关的详细配置说明请参考 [DERP 配置指南](docs/derp.md)。
 
 #### 常用运维命令
 
@@ -246,6 +223,7 @@ docker exec hs-headscale headscale apikey create
 
 - `postgres-data` — 数据库
 - `headscale-data` — Headscale 运行数据 + API Key
+- `derper-certs` — DERP 服务器 TLS 证书
 
 如需完全重置，执行 `docker compose down -v` 删除 Volume（**数据不可恢复**）。
 
@@ -342,6 +320,9 @@ docker run -d \
 | `DB_NAME` | 数据库名 | — |
 | `DB_USER` | 数据库用户 | — |
 | `DB_PASS` | 数据库密码 | — |
+| `DERP_DOMAIN` | DERP 公网 IP/域名 | — |
+| `DERP_STUN_PORT` | STUN 端口 (UDP) | `3478` |
+| `DERP_HTTP_PORT` | DERP Relay 端口 (TCP) | `3479` |
 
 **管理后端容器：**
 
@@ -392,9 +373,9 @@ sudo vim /etc/headscale/config.yaml
 
 ```yaml
 server_url: http://你的公网IP:8080
-listen_addr: 0.0.0.0:8080         # 生产环境改为 0.0.0.0
+listen_addr: 0.0.0.0:8080
 database:
-  type: postgres                    # 或 sqlite
+  type: postgres
   postgres:
     host: 127.0.0.1
     port: 5432
@@ -402,7 +383,7 @@ database:
     user: headscale_admin
     pass: 你的密码
 policy:
-  mode: database                    # 必须为 database
+  mode: database
 ```
 
 创建 systemd 服务：
@@ -580,64 +561,20 @@ tailscale up --login-server=http://你的公网IP:8080
 
 **现象**：两个节点通过 `100.64.x.x` 互相 ping 正常，但从节点 A ping 节点 B advertise 的子网 IP（如 `10.2.0.88`）时无响应。
 
-**原因**：如果节点 A 同时也是 Headscale 服务器所在的机器，Headscale 自己的 WireGuard 隧道接口（如 `tun-v3s`）已经注册了 `10.0.0.0/x` 网段的路由，优先级比 Tailscale 的子网路由更高。流量会被 Headscale 接口截走，不会走 Tailscale 隧道。
+**原因**：如果节点 A 同时也是 Headscale 服务器所在的机器，Headscale 自己的 WireGuard 隧道接口（如 `tun-v3s`）已经注册了 `10.0.0.0/x` 网段的路由，优先级比 Tailscale 的子网路由更高。
 
-可以用以下命令确认：
-
-```bash
-ip route get 10.2.0.88
-# 如果输出 dev tun-v3s 而非 dev tailscale0，说明路由被 Headscale 截走了
-```
-
-**解决方案**：
-
-这是一个网络架构层面的冲突，不要在 Headscale 服务器上同时运行 Tailscale 客户端来测试子网路由功能。使用一台独立的机器作为 Tailscale 客户端进行测试。
+**解决方案**：不要在 Headscale 服务器上同时运行 Tailscale 客户端来测试子网路由功能。使用一台独立的机器作为 Tailscale 客户端进行测试。
 
 ### 子网路由通告后仍然不通的检查清单
 
-如果使用独立客户端测试子网路由仍然不通，按以下顺序排查：
-
-**1. 通告节点开启 IP 转发**
-
-```bash
-# 查看当前状态
-sysctl net.ipv4.ip_forward
-
-# 开启（临时）
-sysctl -w net.ipv4.ip_forward=1
-sysctl -w net.ipv6.conf.all.forwarding=1
-
-# 永久生效
-echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
-echo 'net.ipv6.conf.all.forwarding = 1' >> /etc/sysctl.conf
-sysctl -p
-```
-
-**2. Headscale 侧批准路由**
-
-在管理面板的"路由管理"中批准对应的子网路由，或通过命令行：
-
-```bash
-headscale routes list
-headscale routes enable -r <route_id>
-```
-
-**3. 接收端开启 accept-routes**
-
-```bash
-tailscale up --login-server=http://你的headscale地址:8080 --accept-routes
-```
-
-**4. 通告节点关闭严格反向路径过滤**
-
-```bash
-sysctl -w net.ipv4.conf.all.rp_filter=2
-sysctl -w net.ipv4.conf.tailscale0.rp_filter=2
-```
+1. **通告节点开启 IP 转发**：`sysctl -w net.ipv4.ip_forward=1`
+2. **Headscale 侧批准路由**：管理面板"路由管理"中批准，或 `headscale routes enable -r <route_id>`
+3. **接收端开启 accept-routes**：`tailscale up --login-server=... --accept-routes`
+4. **通告节点关闭严格反向路径过滤**：`sysctl -w net.ipv4.conf.all.rp_filter=2`
 
 ### Tailscale 客户端切换到新的 Headscale 服务器
 
-如果旧服务器已不可达，`tailscale logout` 会报连接错误。直接重置本地状态即可：
+如果旧服务器已不可达，`tailscale logout` 会报连接错误。直接重置本地状态：
 
 ```bash
 # Linux
@@ -657,11 +594,19 @@ tailscale up --login-server=http://新服务器地址:8080
 | [Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) | 原版项目（arounyf） |
 | [headscale](https://github.com/juanfont/headscale) | headscale 官方项目 |
 
+## DERP 中继配置
+
+DERP 中继在一键部署时自动配置。自定义端口、故障排查和安全加固请参考：
+
+- [DERP 配置指南（中文）](docs/derp.md)
+- [DERP Configuration Guide (English)](docs/derp_en.md)
+
 ## 路线图
 
 - [x] Docker Compose 一键部署
+- [x] 独立 DERP 中继 + 自动 TLS
+- [x] 实时流量趋势曲线
 - [ ] 深色/浅色模式切换
-- [ ] 仪表盘图表（流量趋势、节点活跃度）
 - [ ] 多语言 i18n 支持（当前仅中文 UI）
 - [ ] OIDC / SSO 集成
 - [ ] 移动端响应式优化
@@ -677,85 +622,3 @@ tailscale up --login-server=http://新服务器地址:8080
 ## 许可证
 
 本项目基于 [MIT License](LICENSE) 开源。
-
----
-
-## English
-
-### About
-
-**Headscale-Admin-Reforged** is a **complete rewrite** of [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) v4.0.0.
-
-The original project was a monolithic application built with Flask + Jinja2. This project has been entirely rebuilt with a modern **frontend-backend separated** architecture: FastAPI serves the REST API on the backend, while Vue 3 powers a SPA on the frontend — all wrapped in a brand-new dark glassmorphism UI.
-
-### Credits & Origin
-
-This project is forked from [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) tag 4.0.0. Special thanks to **arounyf** for the original work.
-
-### Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Backend | Python 3.13 + FastAPI + Uvicorn |
-| Frontend | Vue 3 + Vite + Element Plus + Pinia + Vue Router 4 |
-| Authentication | JWT + native bcrypt (Python 3.13 + bcrypt 5.x compatible) |
-| Database | PostgreSQL 16 (Docker) / SQLite (local dev) |
-| Headscale | [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) (enhanced edition) |
-
-### Quick Start (Docker Compose)
-
-```bash
-# 1. Download docker-compose.yml
-mkdir -p ~/headscale-admin && cd ~/headscale-admin
-curl -fsSL -o docker-compose.yml \
-  https://raw.githubusercontent.com/chen1749144759/Headscale-Admin-Reforged/main/docker/docker-compose.yml
-
-# 2. Create .env (MUST change HEADSCALE_SERVER_URL)
-cat > .env << 'EOF'
-HEADSCALE_SERVER_URL=http://YOUR_PUBLIC_IP:8080
-EOF
-
-# 3. Launch
-docker compose up -d
-
-# 4. Check status
-docker compose ps
-```
-
-Open `http://YOUR_IP` in your browser. The first registered user becomes admin.
-
-For detailed deployment options (Docker single-container, bare-metal), please refer to the [Chinese deployment guide](#部署指南) above.
-
-### Features
-
-- **Dashboard** — Real-time CPU/memory/traffic monitoring, node statistics
-- **Group management** — Headscale user namespace management, node quota, ACL rule templates
-- **Node management** — List, search, filter, rename, delete, tag management (forcedTags)
-- **Route management** — Subnet routes, approve/revoke, autoApprovers editor, Exit Nodes
-- **ACL rule editor** — HuJSON support, formatting, line numbers, database mode sync
-- **Preauthkey management** — Create/delete, one-click copy
-- **System settings** — Connection config, API key, registration policy, security lock
-- **Operation logs** — Paginated audit trail with human-readable names
-- **Health monitoring** — Real-time headscale connection status in header bar
-
-### Screenshots
-
-| Dashboard | User Management |
-|:---:|:---:|
-| ![Dashboard](docs/screenshots/首页.png) | ![User Management](docs/screenshots/用户.png) |
-
-| Group Management | ACL Rules |
-|:---:|:---:|
-| ![Group Management](docs/screenshots/分组.png) | ![ACL Rules](docs/screenshots/ACL.png) |
-
-### Related Projects
-
-| Project | Description |
-|---------|-------------|
-| [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) | Enhanced headscale binary required by this project |
-| [Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) | Original project by arounyf |
-| [headscale](https://github.com/juanfont/headscale) | Official headscale project |
-
-### License
-
-This project is open-sourced under the [MIT License](LICENSE).

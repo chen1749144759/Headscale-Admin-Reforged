@@ -33,21 +33,25 @@ services:
     restart: unless-stopped
     volumes:
       - headscale-data:/var/lib/headscale
+      - derper-certs:/etc/headscale/derp-certs
+      - ./config.yaml.tmpl:/etc/headscale/config.yaml.tmpl:ro
+      - ./derp.yaml.tmpl:/etc/headscale/derp.yaml.tmpl:ro
+      - ./entrypoint.sh:/entrypoint.sh:ro
     ports:
       - "${HS_PORT:-8080}:8080"          # HTTP API + Noise 协议
-      - "${DERP_PORT:-3478}:${DERP_PORT:-3478}/udp" # STUN (内嵌 DERP)
     environment:
       - HEADSCALE_SERVER_URL=${HEADSCALE_SERVER_URL:-http://127.0.0.1:8080}
       - HEADSCALE_DNS_DOMAIN=${HEADSCALE_DNS_DOMAIN:-hs.admin.pro}
       - HEADSCALE_LOG_LEVEL=${HEADSCALE_LOG_LEVEL:-info}
       - DERP_DOMAIN=${DERP_DOMAIN:-}
-      - DERP_PORT=${DERP_PORT:-3478}
+      - DERP_STUN_PORT=${DERP_STUN_PORT:-3478}
+      - DERP_HTTP_PORT=${DERP_HTTP_PORT:-3479}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${POSTGRES_DB:-headscale_admin}
       - DB_USER=${POSTGRES_USER:-headscale_admin}
       - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin2026PG}
-    entrypoint: ["/entrypoint.sh"]
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     networks:
       - hs-net
     depends_on:
@@ -59,6 +63,31 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
+  # ==================== DERP 中继服务器（独立部署） ====================
+  derper:
+    image: ${REGISTRY_MIRROR:-}fredliang/derper:latest
+    container_name: hs-derper
+    restart: unless-stopped
+    ports:
+      - "${DERP_STUN_PORT:-3478}:${DERP_STUN_PORT:-3478}/udp"   # STUN (UDP)
+      - "${DERP_HTTP_PORT:-3479}:${DERP_HTTP_PORT:-3479}/tcp"    # DERP relay (TCP, TLS + 自签证书)
+    volumes:
+      - derper-certs:/app/certs:ro
+    entrypoint:
+      - /app/derper
+      - --hostname=${DERP_DOMAIN:-127.0.0.1}
+      - -a=:${DERP_HTTP_PORT:-3479}
+      - --http-port=-1
+      - --certmode=manual
+      - --certdir=/app/certs
+      - --stun-port=${DERP_STUN_PORT:-3478}
+      - --verify-clients=true
+    networks:
+      - hs-net
+    depends_on:
+      headscale:
+        condition: service_started
 
   # ==================== 管理面板后端 (FastAPI) ====================
   admin-backend:
@@ -104,6 +133,7 @@ services:
 volumes:
   postgres-data:
   headscale-data:
+  derper-certs:
 
 networks:
   hs-net:

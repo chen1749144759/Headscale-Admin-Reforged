@@ -30,6 +30,11 @@
             <el-tag :type="row.ephemeral ? 'warning' : 'info'" size="small">{{ row.ephemeral ? '是' : '否' }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="使用状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.used ? 'success' : ''" size="small">{{ row.used ? '已使用' : '未使用' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="过期时间" width="180">
           <template #default="{ row }">{{ row.expiration || '-' }}</template>
         </el-table-column>
@@ -166,7 +171,17 @@ async function handleCreate() {
 }
 
 async function handleDelete(row) {
-  try { await deletePreauthkey(row.id); ElMessage.success('删除成功'); loadKeys() } catch {}
+  try {
+    const res = await deletePreauthkey(row.id)
+    if (res.code !== 0) {
+      ElMessage.error(res.msg || '删除失败')
+      return
+    }
+    ElMessage.success('删除成功')
+    loadKeys()
+  } catch {
+    ElMessage.error('删除请求失败')
+  }
 }
 
 function copyKey(key) {
