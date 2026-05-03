@@ -9,7 +9,7 @@
 
 > **A completely rewritten web management panel for [headscale](https://github.com/juanfont/headscale).**
 
-[English](#) | [中文](../README.md)
+[English](#) | [中文](../README.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Русский](README_ru.md)
 
 ---
 

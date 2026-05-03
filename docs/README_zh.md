@@ -5,11 +5,11 @@
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Element Plus](https://img.shields.io/badge/Element%20Plus-2.x-409EFF?logo=element&logoColor=white)](https://element-plus.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](#方式一docker-compose-一键部署推荐)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)
 
 > **Headscale Web 管理面板 — 完全重写版**
 
-[English](docs/README_en.md) | [中文](#) | [Deutsch](docs/README_de.md) | [Français](docs/README_fr.md) | [Русский](docs/README_ru.md)
+[English](README_en.md) | [中文](#) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Русский](README_ru.md)
 
 ---
 
@@ -86,15 +86,15 @@
 
 | 控制台 | 用户管理 |
 |:---:|:---:|
-| ![控制台](docs/screenshots/首页.png) | ![用户管理](docs/screenshots/用户.png) |
+| ![控制台](screenshots/首页.png) | ![用户管理](screenshots/用户.png) |
 
 | 分组管理 | ACL 规则 |
 |:---:|:---:|
-| ![分组管理](docs/screenshots/分组.png) | ![ACL 规则](docs/screenshots/ACL.png) |
+| ![分组管理](screenshots/分组.png) | ![ACL 规则](screenshots/ACL.png) |
 
 | 路由管理 | 预认证密钥 |
 |:---:|:---:|
-| ![路由管理](docs/screenshots/路由.png) | ![预认证密钥](docs/screenshots/预认证.png) |
+| ![路由管理](screenshots/路由.png) | ![预认证密钥](screenshots/预认证.png) |
 
 ---
 
@@ -196,7 +196,7 @@ docker compose ps   # 应全部显示 healthy / Up
 | 3478 | UDP | STUN（NAT 穿透打洞） |
 | 3479 | TCP | DERP 中继（TLS 加密） |
 
-> DERP 中继相关的详细配置说明请参考 [DERP 配置指南](docs/derp.md)。
+> DERP 中继相关的详细配置说明请参考 [DERP 配置指南](derp.md)。
 
 #### 常用运维命令
 
@@ -598,8 +598,8 @@ tailscale up --login-server=http://新服务器地址:8080
 
 DERP 中继在一键部署时自动配置。自定义端口、故障排查和安全加固请参考：
 
-- [DERP 配置指南（中文）](docs/derp.md)
-- [DERP Configuration Guide (English)](docs/derp_en.md)
+- [DERP 配置指南（中文）](derp.md)
+- [DERP Configuration Guide (English)](derp_en.md)
 
 ## 路线图
 
@@ -621,10 +621,4 @@ DERP 中继在一键部署时自动配置。自定义端口、故障排查和安
 
 ## 许可证
 
-本项目基于 [MIT License](LICENSE) 开源。
-
-## 打赏
-
-如果这个项目对你有帮助，欢迎请作者喝杯咖啡 :)
-
-<img src="docs/screenshots/donate.jpg" width="300" />
+本项目基于 [MIT License](../LICENSE) 开源。
