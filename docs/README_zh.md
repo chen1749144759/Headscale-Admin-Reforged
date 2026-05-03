@@ -1,4 +1,4 @@
-# Headscale-Admin-Reforged
+# ScaleForge
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -7,7 +7,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](#方式一docker-compose-一键部署推荐)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)
 
-> **Headscale Web 管理面板 — 完全重写版**
+> **ScaleForge — Headscale Web 管理面板**
 
 [English](README_en.md) | [中文](#) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Русский](README_ru.md)
 
@@ -15,13 +15,13 @@
 
 ## 项目简介
 
-**Headscale-Admin-Reforged** 是基于 [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) v4.0.0 的**完全重写**版本。
+**ScaleForge** 是基于 [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) v4.0.0 的**完全重写**版本。
 
 原项目采用 Flask + Jinja2 的单体架构，本项目将其彻底重构为现代化的**前后端分离**架构：后端使用 FastAPI 提供 REST API，前端使用 Vue 3 构建 SPA 单页应用，并采用全新的深色玻璃拟态 UI 设计。
 
 ### 致谢与溯源
 
-本项目 fork 自 [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) tag 4.0.0，感谢原作者 **arounyf** 的出色工作。Reforged 版本在保留原项目功能理念的基础上，对技术架构和 UI 进行了完整的重新实现。
+本项目 fork 自 [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) tag 4.0.0，感谢原作者 **arounyf** 的出色工作。ScaleForge 版本在保留原项目功能理念的基础上，对技术架构和 UI 进行了完整的重新实现。
 
 ## 技术栈
 
@@ -133,7 +133,7 @@ mkdir -p ~/headscale-admin && cd ~/headscale-admin
 # 下载 docker-compose.yml 及模板文件
 for f in docker-compose.yml config.yaml.tmpl derp.yaml.tmpl entrypoint.sh .env.example; do
   curl -fsSL -o "$f" \
-    "https://raw.githubusercontent.com/chen1749144759/Headscale-Admin-Reforged/main/docker/$f"
+    "https://raw.githubusercontent.com/chen1749144759/ScaleForge/main/docker/$f"
 done
 chmod +x entrypoint.sh
 ```
@@ -417,8 +417,8 @@ headscale apikey create
 #### 3.2 部署管理面板后端
 
 ```bash
-git clone https://github.com/chen1749144759/Headscale-Admin-Reforged.git
-cd Headscale-Admin-Reforged
+git clone https://github.com/chen1749144759/ScaleForge.git
+cd ScaleForge
 
 # 创建虚拟环境
 python3 -m venv venv
@@ -450,8 +450,8 @@ After=network.target headscale.service
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/Headscale-Admin-Reforged
-ExecStart=/opt/Headscale-Admin-Reforged/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 5175
+WorkingDirectory=/opt/ScaleForge
+ExecStart=/opt/ScaleForge/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 5175
 Restart=always
 RestartSec=5
 
@@ -465,7 +465,7 @@ sudo systemctl enable --now headscale-admin
 #### 3.3 构建并部署前端
 
 ```bash
-cd Headscale-Admin-Reforged/web
+cd ScaleForge/web
 
 npm install
 npm run build

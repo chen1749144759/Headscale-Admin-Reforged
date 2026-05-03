@@ -1,4 +1,4 @@
-# Headscale-Admin-Reforged
+# ScaleForge
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -15,7 +15,7 @@
 
 ## Über das Projekt
 
-**Headscale-Admin-Reforged** ist eine **vollständige Neuentwicklung** von [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) v4.0.0.
+**ScaleForge** ist eine **vollständige Neuentwicklung** von [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) v4.0.0.
 
 Das ursprüngliche Projekt war eine monolithische Anwendung mit Flask + Jinja2. Dieses Projekt wurde komplett mit einer modernen **Frontend-Backend-Trennung** neu aufgebaut: FastAPI stellt die REST-API im Backend bereit, während Vue 3 eine SPA im Frontend antreibt — eingebettet in ein brandneues Dark-Glassmorphism-UI.
 
@@ -118,7 +118,7 @@ mkdir -p ~/headscale-admin && cd ~/headscale-admin
 # docker-compose.yml und Vorlagendateien herunterladen
 for f in docker-compose.yml config.yaml.tmpl derp.yaml.tmpl entrypoint.sh .env.example; do
   curl -fsSL -o "$f" \
-    "https://raw.githubusercontent.com/chen1749144759/Headscale-Admin-Reforged/main/docker/$f"
+    "https://raw.githubusercontent.com/chen1749144759/ScaleForge/main/docker/$f"
 done
 chmod +x entrypoint.sh
 ```
