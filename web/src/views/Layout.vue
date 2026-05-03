@@ -4,7 +4,7 @@
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-logo" @click="router.push('/console')">
         <img src="/img/logo.ico" alt="Logo" class="logo-icon" />
-        <transition name="fade"><span v-show="!sidebarCollapsed" class="logo-text">Headscale Admin</span></transition>
+        <transition name="fade"><span v-show="!sidebarCollapsed" class="logo-text">ScaleForge</span></transition>
       </div>
 
       <nav class="sidebar-nav">

@@ -1,4 +1,4 @@
-# ScaleForge
+# <img src="docs/icon.ico" width="32" height="32" alt="ScaleForge Icon" /> ScaleForge
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
