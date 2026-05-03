@@ -293,7 +293,7 @@ docker run -d \
   -e SECRET_KEY=你的JWT密钥 \
   -e API_KEY_FILE=/data/headscale/api.key \
   -v headscale-data:/data/headscale:ro \
-  chenzeshi/headscale-admin-backend:latest
+  chenzeshi/scaleforge-backend:latest
 
 # 前端（Nginx）
 docker run -d \
@@ -301,7 +301,7 @@ docker run -d \
   --network hs-net \
   --restart unless-stopped \
   -p 80:80 \
-  chenzeshi/headscale-admin-nginx:latest
+  chenzeshi/scaleforge-nginx:latest
 ```
 
 > **注意**：Nginx 容器内置的反向代理配置通过容器名 `admin-backend` 和 `headscale` 连接后端和 Headscale。如果你的容器名不同，需要自定义 nginx.conf 并挂载覆盖。

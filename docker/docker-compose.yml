@@ -1,4 +1,4 @@
-# Headscale Admin - Docker Compose 一键部署
+# ScaleForge - Docker Compose 一键部署
 # 启动: docker compose up -d
 # 停止: docker compose down
 #
@@ -91,7 +91,7 @@ services:
 
   # ==================== 管理面板后端 (FastAPI) ====================
   admin-backend:
-    image: ${REGISTRY_MIRROR:-}chenzeshi/headscale-admin-backend:${BACKEND_VERSION:-latest}
+    image: ${REGISTRY_MIRROR:-}chenzeshi/scaleforge-backend:${BACKEND_VERSION:-latest}
     container_name: hs-admin-backend
     restart: unless-stopped
     environment:
@@ -119,7 +119,7 @@ services:
 
   # ==================== Nginx 前端 + 反向代理 ====================
   nginx:
-    image: ${REGISTRY_MIRROR:-}chenzeshi/headscale-admin-nginx:${NGINX_VERSION:-latest}
+    image: ${REGISTRY_MIRROR:-}chenzeshi/scaleforge-nginx:${NGINX_VERSION:-latest}
     container_name: hs-nginx
     restart: unless-stopped
     ports:
