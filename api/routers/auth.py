@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 import psycopg2
 import psycopg2.extras
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Response
 import bcrypt as _bcrypt
 from pydantic import BaseModel
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/api/auth", tags=["认证"])
 class LoginReq(BaseModel):
     username: str
     password: str
+    captchaToken: str = ''
 
 class RegisterReq(BaseModel):
     username: str
@@ -36,11 +38,47 @@ class ProfileReq(BaseModel):
     email: str = ''
     cellphone: str = ''
 
+def _captcha_siteverify_url() -> str:
+    if deps.CAPTCHA_SITEVERIFY_URL:
+        return deps.CAPTCHA_SITEVERIFY_URL
+
+    endpoint = deps.CAPTCHA_API_ENDPOINT.rstrip('/')
+    if endpoint.startswith('http://') or endpoint.startswith('https://'):
+        return f'{endpoint}/siteverify'
+    return ''
+
+def verify_captcha(token: str):
+    if not deps.CAPTCHA_ENABLED:
+        return
+
+    if not token:
+        raise HTTPException(400, '请先完成验证码')
+
+    siteverify_url = _captcha_siteverify_url()
+    if not siteverify_url or not deps.CAPTCHA_SECRET_KEY:
+        raise HTTPException(500, '验证码服务未配置')
+
+    try:
+        resp = requests.post(
+            siteverify_url,
+            json={'secret': deps.CAPTCHA_SECRET_KEY, 'response': token},
+            timeout=5,
+        )
+        data = resp.json()
+    except requests.RequestException as exc:
+        raise HTTPException(502, '验证码服务不可用') from exc
+    except ValueError as exc:
+        raise HTTPException(502, '验证码服务响应异常') from exc
+
+    if not resp.ok or not data.get('success'):
+        raise HTTPException(400, '验证码校验失败，请重试')
+
 @router.post('/login')
 def login(req: LoginReq, response: Response):
     """用户登录"""
     username = req.username
     password = req.password
+    verify_captcha(req.captchaToken)
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

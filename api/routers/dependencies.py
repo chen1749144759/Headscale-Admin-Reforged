@@ -90,6 +90,32 @@ DEFAULT_NODE_COUNT = int(os.environ.get('DEFAULT_NODE_COUNT', 0) or CFG.get('def
 SECRET_KEY = os.environ.get('SECRET_KEY') or CFG.get('secret_key', 'change-me')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRE_SECONDS = 86400  # 24h
+_CAPTCHA_CFG = CFG.get('captcha', {}) or {}
+_CAPTCHA_ENABLED_RAW = os.environ.get(
+    'CAPTCHA_ENABLED',
+    str(_CAPTCHA_CFG.get('enabled', 'true'))
+)
+CAPTCHA_ENABLED = str(_CAPTCHA_ENABLED_RAW).lower() not in ('0', 'false', 'no', 'off')
+CAPTCHA_WIDGET_SRC = (
+    os.environ.get('CAPTCHA_WIDGET_SRC')
+    or _CAPTCHA_CFG.get('widget_src')
+    or 'https://cdn.jsdelivr.net/npm/cap-widget'
+)
+CAPTCHA_API_ENDPOINT = (
+    os.environ.get('CAPTCHA_API_ENDPOINT')
+    or _CAPTCHA_CFG.get('api_endpoint')
+    or 'http://10.2.1.100:30030/38e3a43c07/'
+)
+CAPTCHA_SITEVERIFY_URL = (
+    os.environ.get('CAPTCHA_SITEVERIFY_URL')
+    or _CAPTCHA_CFG.get('siteverify_url')
+    or ''
+)
+CAPTCHA_SECRET_KEY = (
+    os.environ.get('CAPTCHA_SECRET_KEY')
+    or _CAPTCHA_CFG.get('secret_key')
+    or 'sk-WDJufeC3IgXc79DGU8WUEr2wNxhqGk6TUwyVYnyqg'
+)
 
 # Docker 环境：尝试从共享卷读取 API Key
 _API_KEY_FILE = os.environ.get('API_KEY_FILE', '/data/headscale/api.key')

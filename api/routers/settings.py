@@ -74,6 +74,11 @@ def public_status():
             'headscale_running': hs_running,
             'headscale_healthy': hs_healthy,
             'initialized': initialized,
+            'captcha': {
+                'enabled': deps.CAPTCHA_ENABLED,
+                'widget_src': deps.CAPTCHA_WIDGET_SRC,
+                'api_endpoint': deps.CAPTCHA_API_ENDPOINT,
+            },
         }
     }
 

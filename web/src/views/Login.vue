@@ -28,26 +28,29 @@
               <el-input v-model="form.password" placeholder="密码" type="password" show-password size="large" prefix-icon="Lock" @keyup.enter="handleLogin" />
             </el-form-item>
 
-            <!-- 滑块验证 -->
+            <!-- Cap 挑战验证码 -->
             <el-form-item>
-              <div class="slide-verify-wrap">
-                <slide-verify
-                  ref="slideVerifyRef"
-                  :w="310"
-                  :h="155"
-                  :l="42"
-                  :r="10"
-                  :accuracy="5"
-                  slider-text="向右滑动完成验证"
-                  @success="onVerifySuccess"
-                  @fail="onVerifyFail"
-                  @refresh="onVerifyRefresh"
+              <div class="cap-verify-wrap">
+                <cap-widget
+                  v-if="captchaEnabled && captchaReady && captchaConfig.apiEndpoint"
+                  :key="captchaKey"
+                  ref="capWidgetRef"
+                  :data-cap-api-endpoint="captchaConfig.apiEndpoint"
+                  data-cap-lang="zh-CN"
+                  @solve="onCaptchaSolve"
+                  @error="onCaptchaError"
                 />
+                <div v-else-if="captchaEnabled" class="captcha-placeholder">
+                  {{ captchaError || '验证码加载中...' }}
+                </div>
+                <div v-else class="captcha-placeholder captcha-disabled">
+                  验证码已关闭
+                </div>
               </div>
             </el-form-item>
 
             <el-form-item>
-              <el-button type="primary" size="large" :loading="loading" :disabled="!verified" @click="handleLogin" style="width:100%">
+              <el-button type="primary" size="large" :loading="loading" :disabled="captchaEnabled && !verified" @click="handleLogin" style="width:100%">
                 {{ loading ? '登录中...' : '登 录' }}
               </el-button>
             </el-form-item>
@@ -68,8 +71,6 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { login, getPublicStatus } from '@/api'
 import { ElMessage } from 'element-plus'
-import SlideVerify from 'vue3-slide-verify'
-import 'vue3-slide-verify/dist/style.css'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -83,35 +84,95 @@ const rules = {
 const loading = ref(false)
 const openReg = ref(false)
 
-// ─── 滑块验证 ───
-const slideVerifyRef = ref(null)
+// ─── 挑战验证码 ───
+const capWidgetRef = ref(null)
 const verified = ref(false)
+const captchaToken = ref('')
+const captchaReady = ref(false)
+const captchaKey = ref(0)
+const captchaError = ref('')
+const captchaEnabled = ref(true)
+const captchaConfig = reactive({
+  apiEndpoint: 'http://10.2.1.100:30030/38e3a43c07/',
+  widgetSrc: 'https://cdn.jsdelivr.net/npm/cap-widget',
+})
 
-function onVerifySuccess() {
-  verified.value = true
+function onCaptchaSolve(event) {
+  captchaToken.value = event.detail?.token || ''
+  verified.value = Boolean(captchaToken.value)
 }
-function onVerifyFail() {
-  verified.value = false
+function onCaptchaError() {
+  resetCaptcha()
 }
-function onVerifyRefresh() {
+function resetCaptcha() {
+  captchaToken.value = ''
   verified.value = false
+  captchaKey.value += 1
+}
+
+function loadCaptchaScript(src) {
+  return new Promise((resolve, reject) => {
+    if (!src) return reject(new Error('empty captcha widget src'))
+    if (window.customElements?.get('cap-widget')) return resolve()
+
+    const waitForDefinition = () => {
+      if (!window.customElements?.whenDefined) return resolve()
+
+      const timer = window.setTimeout(() => {
+        reject(new Error('captcha widget registration timeout'))
+      }, 8000)
+
+      window.customElements.whenDefined('cap-widget')
+        .then(() => {
+          window.clearTimeout(timer)
+          resolve()
+        })
+        .catch((error) => {
+          window.clearTimeout(timer)
+          reject(error)
+        })
+    }
+
+    const existing = document.querySelector('script[data-cap-widget]')
+    if (existing) {
+      if (existing.dataset.loaded === 'true') {
+        waitForDefinition()
+        return
+      }
+
+      existing.addEventListener('load', waitForDefinition, { once: true })
+      existing.addEventListener('error', reject, { once: true })
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = src
+    script.type = 'module'
+    script.async = true
+    script.dataset.capWidget = 'true'
+    script.onload = () => {
+      script.dataset.loaded = 'true'
+      waitForDefinition()
+    }
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
 }
 
 // ─── 登录逻辑 ───
 async function handleLogin() {
-  if (!verified.value) return ElMessage.warning('请先完成滑块验证')
+  if (captchaEnabled.value && !verified.value) return ElMessage.warning('请先完成验证码')
   await formRef.value.validate()
   loading.value = true
   try {
-    const res = await login(form)
+    const res = await login({ ...form, captchaToken: captchaToken.value })
     userStore.setToken(res.data.token)
     userStore.userInfo = res.data.user
     ElMessage.success('登录成功')
     const target = res.data.user.role === 'manager' ? '/console' : '/users'
     router.push(target)
   } catch {
-    verified.value = false
-    slideVerifyRef.value?.refresh()
+    resetCaptcha()
   } finally {
     loading.value = false
   }
@@ -196,10 +257,27 @@ function initNetworkAnimation() {
 onMounted(async () => {
   try {
     const res = await getPublicStatus()
-    // 未初始化时（数据库无管理员）才显示注册入口
-    openReg.value = res.data?.initialized === false
-    userStore.systemStatus = res.data || userStore.systemStatus
+    const data = res.data || {}
+    openReg.value = data.initialized === false
+    userStore.systemStatus = data || userStore.systemStatus
+
+    const captcha = data.captcha || {}
+    captchaEnabled.value = captcha.enabled !== false
+    captchaConfig.apiEndpoint = captcha.api_endpoint || captchaConfig.apiEndpoint
+    captchaConfig.widgetSrc = captcha.widget_src || captchaConfig.widgetSrc
   } catch {}
+
+  if (captchaEnabled.value) {
+    try {
+      await loadCaptchaScript(captchaConfig.widgetSrc)
+      captchaReady.value = true
+    } catch {
+      captchaError.value = '验证码加载失败，请刷新页面重试'
+    }
+  } else {
+    verified.value = true
+  }
+
   initNetworkAnimation()
 })
 
@@ -314,31 +392,36 @@ onBeforeUnmount(() => {
 .link-primary { color: var(--v3s-primary-light); font-weight: 500; }
 .link-primary:hover { color: #fff; }
 
-/* ─── 滑块验证适配深色主题 ─── */
-.slide-verify-wrap {
+/* ─── 挑战验证码适配深色主题 ─── */
+.cap-verify-wrap {
   width: 100%;
 }
-.slide-verify-wrap :deep(.slide-verify) {
-  border-radius: 10px;
-  overflow: hidden;
+.cap-verify-wrap cap-widget {
+  width: 100%;
+  --cap-widget-width: 100%;
+  --cap-widget-height: 46px;
+  --cap-background: rgba(255,255,255,0.06);
+  --cap-border-color: rgba(255,255,255,0.1);
+  --cap-border-radius: 10px;
+  --cap-color: rgba(255,255,255,0.88);
+  --cap-checkbox-background: rgba(255,255,255,0.08);
+  --cap-checkbox-border: 1px solid rgba(255,255,255,0.24);
+  --cap-spinner-color: #818cf8;
+  --cap-spinner-background-color: rgba(255,255,255,0.16);
 }
-.slide-verify-wrap :deep(.slide-verify-slider) {
-  background: rgba(255,255,255,0.06);
+.captcha-placeholder {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px;
-}
-.slide-verify-wrap :deep(.slide-verify-slider--text) {
-  color: rgba(255,255,255,0.35);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.48);
   font-size: 13px;
 }
-.slide-verify-wrap :deep(.slide-verify-slider--icon) {
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 6px;
-}
-.slide-verify-wrap :deep(.slide-verify-slider--success) {
-  background: rgba(16,185,129,0.12);
-  border-color: rgba(16,185,129,0.3);
+.captcha-disabled {
+  color: rgba(255,255,255,0.35);
 }
 
 /* ─── 响应式 ─── */
