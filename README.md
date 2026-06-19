@@ -5,6 +5,8 @@
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Element Plus](https://img.shields.io/badge/Element%20Plus-2.x-409EFF?logo=element&logoColor=white)](https://element-plus.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](#方式一docker-compose-一键部署推荐)
+[![Base](https://img.shields.io/badge/Base-Headscale--Admin--Pro%204.0.0-7C3AED)](https://github.com/arounyf/Headscale-Admin-Pro)
+[![Headscale AE](https://img.shields.io/badge/Headscale_AE-v0.28.0%20%2B%20v0.29.1%20fixes-326CE5)](https://github.com/chen1749144759/Headscale-Admin-AE)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **ScaleForge — Headscale Web 管理面板**
@@ -22,6 +24,15 @@
 ### 致谢与溯源
 
 本项目 fork 自 [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro) tag 4.0.0，感谢原作者 **arounyf** 的出色工作。ScaleForge 版本在保留原项目功能理念的基础上，对技术架构和 UI 进行了完整的重新实现。
+
+## 当前对标版本与本轮更新
+
+- 管理面板对标来源：`Headscale-Admin-Pro v4.0.0`，ScaleForge 在此基础上重写为 FastAPI + Vue 3 + Element Plus 的前后端分离版本。
+- Headscale 服务端对标：配套使用 `Headscale-Admin-AE`，其基础为 headscale `v0.28.0` AE 分支，并已回补官方 headscale `v0.29.1` 的注册、重注册和稳定性修复。
+- 客户端对接建议：配套 ScaleTail 客户端，ScaleTail 核心网络代码已按 Tailscale `v1.98.5` 关键修复审计。
+- 本轮已将 `codex/challenge-captcha` 分支快进同步到 `main`，登录页改为 Cap 挑战验证码，后端登录接口会调用 `siteverify` 校验验证码 token。
+- 公共状态接口 `/api/public/status` 会返回验证码开关、组件脚本和 API endpoint，前端登录页根据服务端配置动态加载验证码组件。
+- Docker 镜像命名已统一为 `scaleforge-backend` / `scaleforge-nginx`，便于和旧 Headscale-Admin-AE 镜像区分。
 
 ## 技术栈
 
@@ -77,6 +88,7 @@
 - **ACL 规则编辑器** — HuJSON 支持、格式化、行号显示、database 模式自动同步
 - **预授权密钥** — 创建（过期时间/可复用/临时节点）、删除、一键复制
 - **DERP 中继** — 独立 DERP 服务器，自签证书自动生成，零配置部署
+- **登录安全** — 支持 Cap 挑战验证码，登录前完成挑战并由后端二次校验
 - **系统设置** — headscale 连接配置、API Key 管理、注册策略、安全锁定保护
 - **操作日志** — 分页查看操作记录，日志内容显示机器名/分组名（非 ID）
 - **个人中心** — 资料编辑、密码修改
@@ -333,6 +345,11 @@ docker run -d \
 | `DATABASE_URL` | 完整 DSN（与分离参数二选一） | — |
 | `SECRET_KEY` | JWT 签名密钥 | `change-me` |
 | `API_KEY_FILE` | Headscale API Key 文件路径 | `/data/headscale/api.key` |
+| `CAPTCHA_ENABLED` | 是否启用登录挑战验证码，`false` 可关闭 | `true` |
+| `CAPTCHA_WIDGET_SRC` | Cap 前端组件脚本地址 | `https://cdn.jsdelivr.net/npm/cap-widget` |
+| `CAPTCHA_API_ENDPOINT` | Cap 服务 API 地址，前端组件使用 | 内置示例地址 |
+| `CAPTCHA_SITEVERIFY_URL` | 后端验证码校验地址，留空时使用 `CAPTCHA_API_ENDPOINT/siteverify` | — |
+| `CAPTCHA_SECRET_KEY` | 后端调用 Cap `siteverify` 使用的密钥 | 内置示例密钥 |
 
 ---
 
