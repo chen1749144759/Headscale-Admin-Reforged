@@ -14,6 +14,33 @@ export const getPublicStatus = () => request.get('/public/status')
 export const getSystemInfo = () => request.get('/system/info')
 export const getSystemTraffic = () => request.get('/system/traffic')
 
+// 流量统计
+export const getTrafficSummary = () => request.get('/traffic/summary')
+export const getTrafficTopMachines = (params) => request.get('/traffic/top-machines', { params })
+export const getTrafficTopGroups = (params) => request.get('/traffic/top-groups', { params })
+export const getTrafficSamples = (params) => request.get('/traffic/samples', { params })
+export const getTrafficTopDestinations = (params) => request.get('/traffic/top-destinations', { params })
+export const getTrafficFlows = (params) => request.get('/traffic/flows', { params })
+
+// 客户端策略
+export const getClientPolicies = () => request.get('/client-policies')
+export const createClientPolicy = (data) => request.post('/client-policies', data)
+export const updateClientPolicy = (id, data) => request.put(`/client-policies/${id}`, data)
+export const deleteClientPolicy = (id) => request.delete(`/client-policies/${id}`)
+export const getClientPolicyStates = () => request.get('/client-policies/states')
+
+// 安全中心
+export const getSecuritySummary = () => request.get('/security/summary')
+export const getSecurityEvents = (params) => request.get('/security/events', { params })
+export const createSecurityEvent = (data) => request.post('/security/events', data)
+export const updateSecurityEventStatus = (id, data) => request.patch(`/security/events/${id}`, data)
+export const getIpObservations = (params) => request.get('/security/ip-observations', { params })
+export const getTrustedNetworks = () => request.get('/security/trusted-networks')
+export const createTrustedNetwork = (data) => request.post('/security/trusted-networks', data)
+export const deleteTrustedNetwork = (id) => request.delete(`/security/trusted-networks/${id}`)
+export const getRiskRules = () => request.get('/security/risk-rules')
+export const updateRiskRule = (key, data) => request.put(`/security/risk-rules/${key}`, data)
+
 // ─── 用户(机器) ──────────────────────────────────────
 export const getNodes = () => request.get('/users')
 export const deleteNode = (id) => request.delete(`/users/${id}`)

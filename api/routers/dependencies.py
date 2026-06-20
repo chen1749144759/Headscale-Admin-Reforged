@@ -146,6 +146,199 @@ def get_db_conn():
     conn.cursor_factory = psycopg2.extras.RealDictCursor
     return conn
 
+def ensure_observability_schema():
+    """确保流量、策略、IP定位和安全事件相关表存在。"""
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS client_policies (
+            id SERIAL PRIMARY KEY,
+            scope TEXT NOT NULL,
+            group_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            group_name TEXT,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+            machine_name TEXT,
+            rate_up_mbps DOUBLE PRECISION,
+            rate_down_mbps DOUBLE PRECISION,
+            monthly_quota_gb DOUBLE PRECISION,
+            exceed_action TEXT DEFAULT 'throttle',
+            enabled BOOLEAN DEFAULT TRUE,
+            priority INTEGER DEFAULT 100,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW(),
+            remark TEXT
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS client_policy_states (
+            id SERIAL PRIMARY KEY,
+            policy_id INTEGER REFERENCES client_policies(id) ON DELETE SET NULL,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+            machine_name TEXT,
+            applied BOOLEAN DEFAULT FALSE,
+            effective_policy JSONB,
+            error TEXT,
+            applied_at TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS traffic_samples (
+            id SERIAL PRIMARY KEY,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+            machine_name TEXT,
+            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            group_name TEXT,
+            rx_bytes_total BIGINT DEFAULT 0,
+            tx_bytes_total BIGINT DEFAULT 0,
+            rx_bytes_delta BIGINT DEFAULT 0,
+            tx_bytes_delta BIGINT DEFAULT 0,
+            rx_rate_bps DOUBLE PRECISION DEFAULT 0,
+            tx_rate_bps DOUBLE PRECISION DEFAULT 0,
+            derp BOOLEAN DEFAULT FALSE,
+            endpoint_type TEXT,
+            observed_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS traffic_hourly (
+            id SERIAL PRIMARY KEY,
+            bucket_start TIMESTAMP NOT NULL,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            rx_bytes BIGINT DEFAULT 0,
+            tx_bytes BIGINT DEFAULT 0,
+            peak_rx_rate_bps DOUBLE PRECISION DEFAULT 0,
+            peak_tx_rate_bps DOUBLE PRECISION DEFAULT 0,
+            UNIQUE(bucket_start, machine_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS traffic_daily (
+            id SERIAL PRIMARY KEY,
+            bucket_date DATE NOT NULL,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            rx_bytes BIGINT DEFAULT 0,
+            tx_bytes BIGINT DEFAULT 0,
+            UNIQUE(bucket_date, machine_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS node_ip_observations (
+            id SERIAL PRIMARY KEY,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+            machine_name TEXT,
+            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            group_name TEXT,
+            ip TEXT NOT NULL,
+            country TEXT,
+            region TEXT,
+            city TEXT,
+            asn TEXT,
+            isp TEXT,
+            risk_flags JSONB,
+            first_seen TIMESTAMP DEFAULT NOW(),
+            last_seen TIMESTAMP DEFAULT NOW(),
+            seen_count INTEGER DEFAULT 1
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS flow_summaries (
+            id SERIAL PRIMARY KEY,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+            machine_name TEXT,
+            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            group_name TEXT,
+            window_start TIMESTAMP NOT NULL,
+            window_seconds INTEGER NOT NULL DEFAULT 60,
+            dst_ip TEXT,
+            dst_port INTEGER,
+            protocol TEXT,
+            direction TEXT,
+            bytes BIGINT DEFAULT 0,
+            packets BIGINT DEFAULT 0,
+            connection_count INTEGER DEFAULT 0,
+            state TEXT,
+            process_id INTEGER,
+            process_name TEXT
+        )
+        """,
+        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS machine_name TEXT",
+        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS group_name TEXT",
+        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS connection_count INTEGER DEFAULT 0",
+        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS state TEXT",
+        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS process_id INTEGER",
+        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS process_name TEXT",
+        """
+        CREATE TABLE IF NOT EXISTS security_events (
+            id SERIAL PRIMARY KEY,
+            level TEXT NOT NULL DEFAULT 'info',
+            event_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            group_name TEXT,
+            machine_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+            machine_name TEXT,
+            ip TEXT,
+            country TEXT,
+            city TEXT,
+            asn TEXT,
+            evidence JSONB,
+            status TEXT NOT NULL DEFAULT 'open',
+            handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            handled_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS trusted_networks (
+            id SERIAL PRIMARY KEY,
+            kind TEXT NOT NULL,
+            value TEXT NOT NULL,
+            description TEXT,
+            enabled BOOLEAN DEFAULT TRUE,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS risk_rules (
+            id SERIAL PRIMARY KEY,
+            rule_key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            level TEXT NOT NULL DEFAULT 'medium',
+            enabled BOOLEAN DEFAULT TRUE,
+            config JSONB,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_client_policies_scope ON client_policies(scope)",
+        "CREATE INDEX IF NOT EXISTS idx_client_policies_group_id ON client_policies(group_id)",
+        "CREATE INDEX IF NOT EXISTS idx_client_policies_machine_id ON client_policies(machine_id)",
+        "CREATE INDEX IF NOT EXISTS idx_traffic_samples_machine_time ON traffic_samples(machine_id, observed_at)",
+        "CREATE INDEX IF NOT EXISTS idx_traffic_samples_group_time ON traffic_samples(group_id, observed_at)",
+        "CREATE INDEX IF NOT EXISTS idx_node_ip_observations_machine ON node_ip_observations(machine_id)",
+        "CREATE INDEX IF NOT EXISTS idx_flow_summaries_machine_window ON flow_summaries(machine_id, window_start)",
+        "CREATE INDEX IF NOT EXISTS idx_security_events_status ON security_events(status)",
+        "CREATE INDEX IF NOT EXISTS idx_security_events_level ON security_events(level)",
+        "CREATE INDEX IF NOT EXISTS idx_security_events_created_at ON security_events(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_trusted_networks_kind_value ON trusted_networks(kind, value)",
+    ]
+
+    try:
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            for statement in statements:
+                cur.execute(statement)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f'观测与安全表初始化失败: {exc}')
+
 # ─── 日志记录 ─────────────────────────────────────────
 def record_log(conn, user_id: int, content: str):
     """记录操作日志"""

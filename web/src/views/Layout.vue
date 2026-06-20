@@ -106,6 +106,9 @@ const sidebarCollapsed = ref(false)
 const currentPath = computed(() => route.path)
 const currentName = computed(() => {
   const map = {
+    '/traffic': '流量统计',
+    '/client-policies': '限速策略',
+    '/security': '安全中心',
     '/console': '控制台', '/users': '用户管理', '/groups': '分组管理',
     '/routes': '路由管理', '/acl': 'ACL 规则', '/preauthkeys': '预认证密钥',
     '/settings': '系统设置', '/logs': '操作日志', '/profile': '个人资料',
@@ -115,6 +118,14 @@ const currentName = computed(() => {
 })
 
 const menuGroups = [
+  {
+    label: '安全运维',
+    items: [
+      { name: '流量统计', path: '/traffic', icon: markRaw(DataAnalysis) },
+      { name: '限速策略', path: '/client-policies', icon: markRaw(Setting), managerOnly: true },
+      { name: '安全中心', path: '/security', icon: markRaw(Tickets) },
+    ],
+  },
   {
     label: '概览',
     items: [

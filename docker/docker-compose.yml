@@ -102,6 +102,8 @@ services:
       - DB_USER=${POSTGRES_USER:-headscale_admin}
       - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin2026PG}
       - SECRET_KEY=${SECRET_KEY:-headscale-admin-secret-2026}
+      - SCALETAIL_CLIENT_TOKEN=${SCALETAIL_CLIENT_TOKEN:-}
+      - IP_GEOLOOKUP_URL=${IP_GEOLOOKUP_URL:-}
       - API_KEY_FILE=/data/headscale/api.key
     volumes:
       - headscale-data:/data/headscale:ro

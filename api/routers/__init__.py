@@ -10,6 +10,10 @@ from .preauthkeys import router as preauthkeys_router
 from .settings import router as settings_router
 from .logs import router as logs_router
 from .groups import router as groups_router
+from .traffic import router as traffic_router
+from .client_policies import router as client_policies_router
+from .security import router as security_router
+from .client_reports import router as client_reports_router
 
 __all__ = [
     "auth_router",
@@ -21,4 +25,8 @@ __all__ = [
     "settings_router",
     "logs_router",
     "groups_router",
+    "traffic_router",
+    "client_policies_router",
+    "security_router",
+    "client_reports_router",
 ]

@@ -20,11 +20,16 @@ from routers import (
     settings_router,
     logs_router,
     groups_router,
+    traffic_router,
+    client_policies_router,
+    security_router,
+    client_reports_router,
 )
 
 # ─── 配置 ─────────────────────────────────────────────
-from routers.dependencies import load_config
+from routers.dependencies import ensure_observability_schema, load_config
 load_config()
+ensure_observability_schema()
 
 # ─── FastAPI 应用 ─────────────────────────────────────
 app = FastAPI(
@@ -52,6 +57,10 @@ app.include_router(preauthkeys_router)
 app.include_router(settings_router)
 app.include_router(logs_router)
 app.include_router(groups_router)
+app.include_router(traffic_router)
+app.include_router(client_policies_router)
+app.include_router(security_router)
+app.include_router(client_reports_router)
 
 # ─── 健康检查 ─────────────────────────────────────────
 @app.get('/api/health')
