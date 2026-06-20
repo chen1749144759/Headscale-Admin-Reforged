@@ -104,6 +104,11 @@ services:
       - SECRET_KEY=${SECRET_KEY:-headscale-admin-secret-2026}
       - SCALETAIL_CLIENT_TOKEN=${SCALETAIL_CLIENT_TOKEN:-}
       - IP_GEOLOOKUP_URL=${IP_GEOLOOKUP_URL:-}
+      - CAPTCHA_ENABLED=${CAPTCHA_ENABLED:-true}
+      - CAPTCHA_WIDGET_SRC=${CAPTCHA_WIDGET_SRC:-https://cdn.jsdelivr.net/npm/cap-widget}
+      - CAPTCHA_API_ENDPOINT=${CAPTCHA_API_ENDPOINT:-http://10.2.1.100:30030/62f60ca190/}
+      - CAPTCHA_SITEVERIFY_URL=${CAPTCHA_SITEVERIFY_URL:-}
+      - CAPTCHA_SECRET_KEY=${CAPTCHA_SECRET_KEY:-}
       - API_KEY_FILE=/data/headscale/api.key
     volumes:
       - headscale-data:/data/headscale:ro

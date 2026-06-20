@@ -104,7 +104,7 @@ CAPTCHA_WIDGET_SRC = (
 CAPTCHA_API_ENDPOINT = (
     os.environ.get('CAPTCHA_API_ENDPOINT')
     or _CAPTCHA_CFG.get('api_endpoint')
-    or 'http://10.2.1.100:30030/38e3a43c07/'
+    or 'http://10.2.1.100:30030/62f60ca190/'
 )
 CAPTCHA_SITEVERIFY_URL = (
     os.environ.get('CAPTCHA_SITEVERIFY_URL')
@@ -114,7 +114,7 @@ CAPTCHA_SITEVERIFY_URL = (
 CAPTCHA_SECRET_KEY = (
     os.environ.get('CAPTCHA_SECRET_KEY')
     or _CAPTCHA_CFG.get('secret_key')
-    or 'sk-WDJufeC3IgXc79DGU8WUEr2wNxhqGk6TUwyVYnyqg'
+    or ''
 )
 
 # Docker 环境：尝试从共享卷读取 API Key
