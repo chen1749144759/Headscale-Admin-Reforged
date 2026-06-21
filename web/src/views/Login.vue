@@ -93,7 +93,7 @@ const captchaKey = ref(0)
 const captchaError = ref('')
 const captchaEnabled = ref(true)
 const captchaConfig = reactive({
-  apiEndpoint: 'http://10.2.1.100:30030/38e3a43c07/',
+  apiEndpoint: 'http://10.2.1.100:30030/62f60ca190/',
   widgetSrc: 'https://cdn.jsdelivr.net/npm/cap-widget',
 })
 
@@ -265,7 +265,9 @@ onMounted(async () => {
     captchaEnabled.value = captcha.enabled !== false
     captchaConfig.apiEndpoint = captcha.api_endpoint || captchaConfig.apiEndpoint
     captchaConfig.widgetSrc = captcha.widget_src || captchaConfig.widgetSrc
-  } catch {}
+  } catch {
+    captchaError.value = '验证码配置加载失败，请检查 /api/public/status 是否可访问'
+  }
 
   if (captchaEnabled.value) {
     try {
