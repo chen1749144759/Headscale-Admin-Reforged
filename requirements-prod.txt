@@ -1,7 +1,5 @@
-# Headscale-Admin-Pro 生产环境依赖（FastAPI 版）
-# 安装: pip install -r requirements-prod.txt
+# ScaleForge production backend dependencies.
 
-# FastAPI 核心框架
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-jose[cryptography]>=3.3.0
@@ -10,17 +8,8 @@ bcrypt>=4.2.0
 python-multipart>=0.0.18
 pydantic>=2.0
 
-# 数据库
 psycopg2-binary>=2.9.10
-
-# 系统监控
 psutil>=5.9
-
-# HTTP 客户端
 requests>=2.31
-
-# YAML 配置
 ruamel.yaml>=0.18
-
-# 密码工具（兼容旧密码格式）
 werkzeug>=3.0

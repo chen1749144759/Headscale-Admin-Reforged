@@ -29,6 +29,13 @@ export const updateClientPolicy = (id, data) => request.put(`/client-policies/${
 export const deleteClientPolicy = (id) => request.delete(`/client-policies/${id}`)
 export const getClientPolicyStates = () => request.get('/client-policies/states')
 
+// 客户端版本发布
+export const getClientReleases = () => request.get('/client-releases')
+export const createClientRelease = (data) => request.post('/client-releases', data)
+export const updateClientRelease = (id, data) => request.put(`/client-releases/${id}`, data)
+export const toggleClientRelease = (id, enabled) => request.patch(`/client-releases/${id}/toggle`, { enabled })
+export const deleteClientRelease = (id) => request.delete(`/client-releases/${id}`)
+
 // 安全中心
 export const getSecuritySummary = () => request.get('/security/summary')
 export const getSecurityEvents = (params) => request.get('/security/events', { params })

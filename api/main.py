@@ -24,6 +24,7 @@ from routers import (
     client_policies_router,
     security_router,
     client_reports_router,
+    client_releases_router,
 )
 
 # ─── 配置 ─────────────────────────────────────────────
@@ -61,6 +62,7 @@ app.include_router(traffic_router)
 app.include_router(client_policies_router)
 app.include_router(security_router)
 app.include_router(client_reports_router)
+app.include_router(client_releases_router)
 
 # ─── 健康检查 ─────────────────────────────────────────
 @app.get('/api/health')

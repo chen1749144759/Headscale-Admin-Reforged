@@ -9,6 +9,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import quote
@@ -69,6 +70,67 @@ class PolicyStateReport(BaseModel):
 
 def _configured_token() -> str:
     return os.environ.get("SCALETAIL_CLIENT_TOKEN") or str(CFG.get("client_report_token") or "")
+
+
+def _version_parts(value: str) -> list[int]:
+    parts = []
+    for item in re.findall(r"\d+", str(value or "")):
+        try:
+            parts.append(int(item))
+        except Exception:
+            continue
+    return parts
+
+
+def _version_gt(remote: str, current: str) -> bool:
+    remote = str(remote or "").strip()
+    current = str(current or "").strip()
+    if not remote:
+        return False
+    remote_parts = _version_parts(remote)
+    current_parts = _version_parts(current)
+    if remote_parts or current_parts:
+        size = max(len(remote_parts), len(current_parts), 3)
+        return (remote_parts + [0] * (size - len(remote_parts))) > (current_parts + [0] * (size - len(current_parts)))
+    return remote != current
+
+
+def _same_version(left: str, right: str) -> bool:
+    left_parts = _version_parts(left)
+    right_parts = _version_parts(right)
+    if left_parts or right_parts:
+        size = max(len(left_parts), len(right_parts), 3)
+        return (left_parts + [0] * (size - len(left_parts))) == (right_parts + [0] * (size - len(right_parts)))
+    return str(left or "").strip() == str(right or "").strip()
+
+
+def _platform_aliases(platform: str) -> list[str]:
+    clean = str(platform or "windows-amd64").strip().lower()
+    aliases = [clean, "all"]
+    if clean.startswith("windows") or clean == "win32":
+        aliases.extend(["windows", "win32"])
+    elif clean.startswith("linux"):
+        aliases.append("linux")
+    elif clean.startswith("macos") or clean.startswith("darwin"):
+        aliases.extend(["macos", "darwin"])
+    return list(dict.fromkeys(item for item in aliases if item))
+
+
+def _release_payload(row: dict[str, Any]) -> dict[str, Any]:
+    update_type = str(row.get("update_type") or "suggested").lower()
+    return {
+        "has_update": True,
+        "id": row.get("id"),
+        "version": row.get("version") or "",
+        "platform": row.get("platform") or "",
+        "update_type": update_type,
+        "forced": update_type == "forced",
+        "title": row.get("title") or "",
+        "description": row.get("description") or "",
+        "download_url": row.get("download_url") or "",
+        "release_notes": row.get("release_notes") or "",
+        "created_at": row.get("created_at") or "",
+    }
 
 
 def require_client_token(request: Request) -> None:
@@ -657,6 +719,50 @@ def _is_private_or_loopback(ip: str) -> bool:
         return parsed.is_private or parsed.is_loopback or parsed.is_link_local
     except ValueError:
         return False
+
+
+@router.get("/client-update")
+def client_update(
+    current_version: str = "",
+    platform: str = "windows-amd64",
+    _: None = Depends(require_client_token),
+):
+    platform_aliases = _platform_aliases(platform)
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT
+                id, version, platform, update_type, title, description,
+                download_url, release_notes,
+                TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at
+            FROM client_releases
+            WHERE enabled = TRUE
+              AND LOWER(platform) = ANY(%s::text[])
+            ORDER BY created_at DESC, id DESC
+            """,
+            (platform_aliases,),
+        )
+        best: Optional[dict[str, Any]] = None
+        for row in cur.fetchall():
+            if not _version_gt(str(row.get("version") or ""), current_version):
+                continue
+            if best is None:
+                best = row
+                continue
+            row_version = str(row.get("version") or "")
+            best_version = str(best.get("version") or "")
+            if _version_gt(row_version, best_version):
+                best = row
+                continue
+            if _same_version(row_version, best_version) and row.get("update_type") == "forced":
+                best = row
+        if not best:
+            return {"code": 0, "data": {"has_update": False}}
+        return {"code": 0, "data": _release_payload(best)}
+    finally:
+        conn.close()
 
 
 @router.post("/traffic")

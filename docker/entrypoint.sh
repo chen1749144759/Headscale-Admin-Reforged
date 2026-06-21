@@ -8,28 +8,24 @@ DERP_OUT="/etc/headscale/derp.yaml"
 API_KEY_FILE="/var/lib/headscale/api.key"
 CERT_DIR="/etc/headscale/derp-certs"
 
-# 1. 渲染 headscale 配置模板
 if [ -f "$CONFIG_TMPL" ] && [ -n "$HEADSCALE_SERVER_URL" ]; then
   echo "[entrypoint] Rendering config from template..."
   envsubst < "$CONFIG_TMPL" > "$CONFIG_OUT"
   echo "[entrypoint] Config generated at $CONFIG_OUT"
 fi
 
-# 2. 渲染 DERP map 模板（独立 DERP 模式）
 if [ -f "$DERP_TMPL" ] && [ -n "$DERP_DOMAIN" ]; then
   echo "[entrypoint] Rendering DERP map from template..."
   envsubst < "$DERP_TMPL" > "$DERP_OUT"
   echo "[entrypoint] DERP map generated at $DERP_OUT"
 fi
 
-# 3. 自动生成 DERP 自签名证书（一键部署，无需手动创建）
 if [ -n "$DERP_DOMAIN" ]; then
   CERT_FILE="$CERT_DIR/$DERP_DOMAIN.crt"
   KEY_FILE="$CERT_DIR/$DERP_DOMAIN.key"
   mkdir -p "$CERT_DIR"
   if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
     echo "[entrypoint] Generating self-signed TLS certificate for DERP ($DERP_DOMAIN)..."
-    # 判断是 IP 还是域名
     if echo "$DERP_DOMAIN" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
       SAN="IP:$DERP_DOMAIN"
     else
@@ -46,17 +42,14 @@ if [ -n "$DERP_DOMAIN" ]; then
   fi
 fi
 
-# 检查配置文件
 if [ ! -f "$CONFIG_OUT" ]; then
   echo "[entrypoint] ERROR: No config.yaml found at $CONFIG_OUT"
   exit 1
 fi
 
-# 3. 后台启动 headscale
 headscale serve -c "$CONFIG_OUT" &
 HS_PID=$!
 
-# 4. 等待 headscale 就绪
 echo "[entrypoint] Waiting for headscale to be ready..."
 for i in $(seq 1 30); do
   if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
@@ -69,7 +62,6 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# 5. 自动创建 API Key（仅首次）
 if [ ! -f "$API_KEY_FILE" ]; then
   echo "[entrypoint] Creating initial API key..."
   API_KEY=$(headscale -c "$CONFIG_OUT" apikey create 2>/dev/null || true)
@@ -84,5 +76,4 @@ else
   echo "[entrypoint] API key file already exists, skipping creation."
 fi
 
-# 6. 前台等待 headscale 进程
-wait $HS_PID
+wait "$HS_PID"

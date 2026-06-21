@@ -24,6 +24,7 @@ const routes = [
       { path: 'routes', name: 'Routes', component: () => import('@/views/Routes.vue') },
       { path: 'traffic', name: 'Traffic', component: () => import('@/views/Traffic.vue') },
       { path: 'client-policies', name: 'ClientPolicies', component: () => import('@/views/ClientPolicies.vue'), meta: { requiresManager: true } },
+      { path: 'client-releases', name: 'ClientReleases', component: () => import('@/views/ClientReleases.vue'), meta: { requiresManager: true } },
       { path: 'security', name: 'Security', component: () => import('@/views/Security.vue') },
       { path: 'acl', name: 'ACL', component: () => import('@/views/Acl.vue'), meta: { requiresManager: true } },
       { path: 'preauthkeys', name: 'Preauthkeys', component: () => import('@/views/Preauthkeys.vue') },

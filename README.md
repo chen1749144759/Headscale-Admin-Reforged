@@ -38,6 +38,7 @@ ScaleForge 本身不是 headscale 控制面进程，它是管理平台。真正�
 - 流量统计：按全局、分组、机器展示收发流量、峰值速率和采样记录。
 - 请求分析：接收 ScaleTail 客户端上报的连接摘要，统计目标 IP、端口、进程和连接次数。
 - 客户端策略：配置全局、分组、机器三层上传限速、下载限速字段、月流量配额、超额动作。
+- 客户端版本发布：发布 ScaleTail 客户端建议更新/强制更新策略，客户端通过上报通道检查新版本并弹出更新提示。
 - 安全审计：安全事件、IP 观测历史、可信网络、风险规则管理。
 - IP 定位：支持可选外部 IP 地理信息接口；未配置时不会影响上报，只是不补充地理字段。
 - 客户端上报接口：使用 `SCALETAIL_CLIENT_TOKEN` 或 `config.yaml: client_report_token` 作为共享密钥。
@@ -56,6 +57,7 @@ ScaleForge 本身不是 headscale 控制面进程，它是管理平台。真正�
 | `security_events` | 安全事件 |
 | `trusted_networks` | 可信 IP/CIDR/ASN/国家规则 |
 | `risk_rules` | 安全风险规则配置 |
+| `client_releases` | ScaleTail 客户端版本发布和强制/建议更新策略 |
 
 这些表也会在 `Headscale-Admin-AE` 启动时同步创建，避免服务端和管理平台字段不一致。
 
@@ -72,8 +74,20 @@ ScaleForge 本身不是 headscale 控制面进程，它是管理平台。真正�
 
 - 数据库连接必须和 Headscale-Admin-AE 使用同一套库。
 - `SCALETAIL_CLIENT_TOKEN` 要和 ScaleTail 客户端页面里的上报密钥一致。
+- 如启用验证码，需部署并配置 Cap 服务，`CAPTCHA_API_ENDPOINT`、`CAPTCHA_SITEVERIFY_URL` 和 `CAPTCHA_SECRET_KEY` 必须对应同一个 Cap 站点。
 - 如果开启 IP 定位，需要配置 `IP_GEOLOOKUP_URL`，例如支持 `{ip}` 占位符的查询接口。
 - Nginx 需要正确反代 `/api/*` 到 FastAPI，必要时反代 `/hs/*` 到 Headscale-Admin-AE。
+
+## 验证码服务
+
+ScaleForge 登录页使用的是 [Cap CAPTCHA](https://trycap.dev/guide/)：
+
+- Cap 是开源、自托管的 CAPTCHA 服务，核心由浏览器端 `cap-widget` 和服务端挑战/校验 API 组成。
+- 官方推荐使用 Cap Standalone Docker 容器部署，并在控制台创建 site key 和 secret key。
+- 前端加载地址由 `CAPTCHA_WIDGET_SRC` 控制，默认是 `https://cdn.jsdelivr.net/npm/cap-widget`。
+- 挑战接口由 `CAPTCHA_API_ENDPOINT` 控制，通常形如 `http://CAP_SERVER:3000/<site-key>/`。
+- 后端二次校验使用 `CAPTCHA_SITEVERIFY_URL` 和 `CAPTCHA_SECRET_KEY`；secret 只写入真实部署 `.env`，不要提交到 Git。
+- 官方文档：[Cap Quickstart](https://trycap.dev/guide/)，源码仓库：[tiagozip/cap](https://github.com/tiagozip/cap)。
 
 ## 快速部署
 

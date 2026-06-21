@@ -14,6 +14,7 @@ from .traffic import router as traffic_router
 from .client_policies import router as client_policies_router
 from .security import router as security_router
 from .client_reports import router as client_reports_router
+from .client_releases import router as client_releases_router
 
 __all__ = [
     "auth_router",
@@ -29,4 +30,5 @@ __all__ = [
     "client_policies_router",
     "security_router",
     "client_reports_router",
+    "client_releases_router",
 ]

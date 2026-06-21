@@ -108,6 +108,7 @@ const currentName = computed(() => {
   const map = {
     '/traffic': '流量统计',
     '/client-policies': '限速策略',
+    '/client-releases': '客户端版本',
     '/security': '安全中心',
     '/console': '控制台', '/users': '用户管理', '/groups': '分组管理',
     '/routes': '路由管理', '/acl': 'ACL 规则', '/preauthkeys': '预认证密钥',
@@ -123,6 +124,7 @@ const menuGroups = [
     items: [
       { name: '流量统计', path: '/traffic', icon: markRaw(DataAnalysis) },
       { name: '限速策略', path: '/client-policies', icon: markRaw(Setting), managerOnly: true },
+      { name: '客户端版本', path: '/client-releases', icon: markRaw(Document), managerOnly: true },
       { name: '安全中心', path: '/security', icon: markRaw(Tickets) },
     ],
   },

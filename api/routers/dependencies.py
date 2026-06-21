@@ -314,6 +314,22 @@ def ensure_observability_schema():
             updated_at TIMESTAMP DEFAULT NOW()
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS client_releases (
+            id SERIAL PRIMARY KEY,
+            version TEXT NOT NULL,
+            platform TEXT NOT NULL DEFAULT 'windows-amd64',
+            update_type TEXT NOT NULL DEFAULT 'suggested',
+            title TEXT,
+            description TEXT,
+            download_url TEXT,
+            release_notes TEXT,
+            enabled BOOLEAN DEFAULT TRUE,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS idx_client_policies_scope ON client_policies(scope)",
         "CREATE INDEX IF NOT EXISTS idx_client_policies_group_id ON client_policies(group_id)",
         "CREATE INDEX IF NOT EXISTS idx_client_policies_machine_id ON client_policies(machine_id)",
@@ -325,6 +341,8 @@ def ensure_observability_schema():
         "CREATE INDEX IF NOT EXISTS idx_security_events_level ON security_events(level)",
         "CREATE INDEX IF NOT EXISTS idx_security_events_created_at ON security_events(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_trusted_networks_kind_value ON trusted_networks(kind, value)",
+        "CREATE INDEX IF NOT EXISTS idx_client_releases_enabled_platform ON client_releases(enabled, platform)",
+        "CREATE INDEX IF NOT EXISTS idx_client_releases_created_at ON client_releases(created_at)",
     ]
 
     try:
