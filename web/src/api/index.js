@@ -19,6 +19,7 @@ export const getTrafficSummary = () => request.get('/traffic/summary')
 export const getTrafficTopMachines = (params) => request.get('/traffic/top-machines', { params })
 export const getTrafficTopGroups = (params) => request.get('/traffic/top-groups', { params })
 export const getTrafficSamples = (params) => request.get('/traffic/samples', { params })
+export const getTrafficSampleHealth = (params) => request.get('/traffic/sample-health', { params })
 export const getTrafficTopDestinations = (params) => request.get('/traffic/top-destinations', { params })
 export const getTrafficFlows = (params) => request.get('/traffic/flows', { params })
 

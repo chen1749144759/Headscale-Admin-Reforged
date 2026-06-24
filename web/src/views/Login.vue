@@ -1,24 +1,50 @@
 <template>
   <div class="login-page">
-    <!-- 网络节点动画背景 -->
     <canvas ref="bgCanvas" class="login-bg-canvas"></canvas>
 
-    <!-- 登录卡片 -->
-    <div class="login-container">
-      <div class="login-card-glass">
-        <!-- 左侧品牌区 -->
-        <div class="card-left">
-          <div class="brand-center">
-            <img src="/img/logo.ico" alt="Logo" class="brand-logo" />
-            <h1 class="brand-title">Headscale</h1>
-            <p class="brand-subtitle">您的自有异地网络组建平台</p>
+    <main class="login-shell">
+      <section class="brand-panel">
+        <div class="brand-top">
+          <img src="/img/logo.ico" alt="ScaleForge" class="brand-logo" />
+          <div>
+            <div class="brand-name">ScaleForge</div>
+            <div class="brand-tag">Private Network Console</div>
           </div>
         </div>
 
-        <!-- 右侧表单区 -->
-        <div class="card-right">
-          <h2 class="form-title">登录</h2>
-          <p class="form-desc">欢迎回来，请输入您的账户信息</p>
+        <div class="brand-copy">
+          <span class="brand-kicker">Zero-trust network operations</span>
+          <h1>统一管理 ScaleTail 节点、路由、流量与安全事件。</h1>
+          <p>为自有 Headscale 网络提供更清晰的控制台入口，面向日常运维、节点审计和客户端策略管理。</p>
+        </div>
+
+        <div class="signal-grid">
+          <div class="signal-card">
+            <span>节点</span>
+            <strong>Identity</strong>
+          </div>
+          <div class="signal-card">
+            <span>路由</span>
+            <strong>Subnet</strong>
+          </div>
+          <div class="signal-card">
+            <span>流量</span>
+            <strong>Telemetry</strong>
+          </div>
+          <div class="signal-card">
+            <span>安全</span>
+            <strong>Audit</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-panel">
+        <div class="form-card">
+          <div class="form-heading">
+            <span class="form-kicker">Secure Login</span>
+            <h2>登录控制台</h2>
+            <p>输入账户信息并完成验证后进入管理后台。</p>
+          </div>
 
           <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="handleLogin" class="login-form">
             <el-form-item prop="username">
@@ -57,11 +83,13 @@
           </el-form>
 
           <div class="form-footer">
-            <span v-if="openReg">首次使用？<router-link to="/register" class="link-primary">初始化系统</router-link></span>
+            <span v-if="openReg">首次登录？<router-link to="/register" class="link-primary">初始化系统</router-link></span>
+            <span v-else>首次登录？请联系管理员创建账户</span>
+            <small>ScaleForge 管理端入口</small>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   </div>
 </template>
 
@@ -291,150 +319,334 @@ onBeforeUnmount(() => {
 <style scoped>
 .login-page {
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, #0a0e1a, #111827, #0f172a);
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    linear-gradient(120deg, rgba(30, 64, 175, 0.22), transparent 34%),
+    linear-gradient(240deg, rgba(16, 185, 129, 0.18), transparent 38%),
+    linear-gradient(135deg, #07111f 0%, #0f172a 48%, #111827 100%);
 }
 
-/* ─── 网络节点动画背景 ─── */
 .login-bg-canvas {
   position: absolute;
   inset: 0;
   z-index: 0;
   width: 100%;
   height: 100%;
+  opacity: 0.72;
 }
 
-/* ─── 卡片容器 ─── */
-.login-container { position: relative; z-index: 1; }
-.login-card-glass {
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.08) 0 1px, transparent 1px 58px),
+    repeating-linear-gradient(0deg, rgba(148, 163, 184, 0.07) 0 1px, transparent 1px 58px);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 82%, transparent 100%);
+}
+
+.login-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1080px, 100%);
+  min-height: 640px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
+.brand-panel,
+.form-card {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(15, 23, 42, 0.64);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px) saturate(135%);
+  -webkit-backdrop-filter: blur(24px) saturate(135%);
+}
+
+.brand-panel {
+  position: relative;
   display: flex;
-  width: 820px;
-  min-height: 520px;
-  background: rgba(255,255,255,0.06);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 24px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 34px;
+  border-radius: 28px;
   overflow: hidden;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
-/* ─── 左侧品牌：居中布局 ─── */
-.card-left {
-  flex: 0 0 320px;
+.brand-panel::after {
+  content: "";
+  position: absolute;
+  left: 34px;
+  right: 34px;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #10b981, #f59e0b);
+}
+
+.brand-top {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.03);
-  border-right: 1px solid rgba(255,255,255,0.08);
+  gap: 14px;
 }
-.brand-center {
-  text-align: center;
-}
+
 .brand-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 20px rgba(79,70,229,0.3);
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(59, 130, 246, 0.34);
 }
-.brand-title {
-  font-size: 28px;
-  font-weight: 700;
+
+.brand-name {
+  font-size: 18px;
+  font-weight: 800;
   color: #fff;
-  margin-bottom: 10px;
-  letter-spacing: 1px;
 }
-.brand-subtitle {
-  font-size: 14px;
-  color: rgba(255,255,255,0.5);
+
+.brand-tag {
+  margin-top: 2px;
+  color: rgba(226, 232, 240, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brand-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 620px;
+  padding: 72px 0 54px;
+}
+
+.brand-kicker,
+.form-kicker {
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.brand-copy h1 {
+  margin: 14px 0 16px;
+  color: #f8fafc;
+  font-size: 42px;
+  line-height: 1.13;
+  font-weight: 850;
+}
+
+.brand-copy p {
+  max-width: 520px;
+  color: rgba(226, 232, 240, 0.68);
+  font-size: 15px;
   line-height: 1.6;
 }
 
-/* ─── 右侧表单 ─── */
-.card-right {
-  flex: 1;
-  padding: 48px 40px;
+.signal-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.signal-card {
+  min-height: 86px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.signal-card span {
+  display: block;
+  color: rgba(226, 232, 240, 0.54);
+  font-size: 12px;
+}
+
+.signal-card strong {
+  display: block;
+  margin-top: 22px;
+  color: #f8fafc;
+  font-size: 13px;
+  font-family: "Fira Code", Consolas, monospace;
+}
+
+.form-panel {
+  display: flex;
+  align-items: stretch;
+}
+
+.form-card {
+  width: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  padding: 38px;
+  border-radius: 26px;
+  background: rgba(248, 250, 252, 0.86);
+  color: #0f172a;
 }
-.form-title { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 6px; }
-.form-desc { font-size: 13px; color: rgba(255,255,255,0.45); margin-bottom: 28px; }
+
+.form-heading {
+  margin-bottom: 28px;
+}
+
+.form-kicker {
+  color: #2563eb;
+}
+
+.form-heading h2 {
+  margin: 8px 0 8px;
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.form-heading p {
+  color: #64748b;
+  font-size: 14px;
+}
+
 .login-form :deep(.el-input__wrapper) {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  box-shadow: none;
-  color: #fff;
+  min-height: 46px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
+
 .login-form :deep(.el-input__wrapper:hover),
 .login-form :deep(.el-input__wrapper.is-focus) {
-  border-color: var(--v3s-primary);
-  box-shadow: 0 0 0 2px rgba(79,70,229,0.15);
+  border-color: #3b82f6;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
 }
-.login-form :deep(.el-input__inner) { color: #fff; }
-.login-form :deep(.el-input__inner::placeholder) { color: rgba(255,255,255,0.35); }
-.login-form :deep(.el-input__prefix .el-icon) { color: rgba(255,255,255,0.4); }
+
+.login-form :deep(.el-input__inner) { color: #0f172a; }
+.login-form :deep(.el-input__inner::placeholder) { color: #94a3b8; }
+.login-form :deep(.el-input__prefix .el-icon) { color: #64748b; }
+
 .login-form :deep(.el-button--primary) {
-  height: 44px;
+  height: 46px;
   font-size: 15px;
-  font-weight: 600;
-  border-radius: 10px;
+  font-weight: 800;
+  border-radius: 12px;
+  border: 0;
+  background: linear-gradient(90deg, #1e40af, #2563eb);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.22);
 }
+
+.login-form :deep(.el-button--primary:hover) {
+  background: linear-gradient(90deg, #1d4ed8, #3b82f6);
+  box-shadow: 0 18px 36px rgba(37, 99, 235, 0.30);
+}
+
 .form-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   text-align: center;
   font-size: 13px;
-  color: rgba(255,255,255,0.4);
-  margin-top: 4px;
+  color: #64748b;
+  margin-top: 14px;
 }
-.link-primary { color: var(--v3s-primary-light); font-weight: 500; }
-.link-primary:hover { color: #fff; }
 
-/* ─── 挑战验证码适配深色主题 ─── */
+.form-footer small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.link-primary {
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.link-primary:hover { color: #1e40af; }
+
 .cap-verify-wrap {
   width: 100%;
 }
+
 .cap-verify-wrap cap-widget {
   width: 100%;
   --cap-widget-width: 100%;
   --cap-widget-height: 46px;
-  --cap-background: rgba(255,255,255,0.06);
-  --cap-border-color: rgba(255,255,255,0.1);
-  --cap-border-radius: 10px;
-  --cap-color: rgba(255,255,255,0.88);
-  --cap-checkbox-background: rgba(255,255,255,0.08);
-  --cap-checkbox-border: 1px solid rgba(255,255,255,0.24);
-  --cap-spinner-color: #818cf8;
-  --cap-spinner-background-color: rgba(255,255,255,0.16);
+  --cap-background: rgba(255, 255, 255, 0.72);
+  --cap-border-color: rgba(148, 163, 184, 0.28);
+  --cap-border-radius: 12px;
+  --cap-color: #0f172a;
+  --cap-checkbox-background: #ffffff;
+  --cap-checkbox-border: 1px solid rgba(100, 116, 139, 0.38);
+  --cap-spinner-color: #2563eb;
+  --cap-spinner-background-color: rgba(37, 99, 235, 0.16);
 }
+
 .captcha-placeholder {
   min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.48);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #64748b;
   font-size: 13px;
 }
+
 .captcha-disabled {
-  color: rgba(255,255,255,0.35);
+  color: #94a3b8;
 }
 
-/* ─── 响应式 ─── */
-@media (max-width: 860px) {
-  .login-card-glass { width: 95vw; flex-direction: column; }
-  .card-left {
-    flex: 0 0 auto;
-    padding: 32px 24px;
-    border-right: none;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+@media (max-width: 980px) {
+  .login-page {
+    padding: 20px;
+    align-items: start;
   }
-  .card-right { padding: 24px; }
+
+  .login-shell {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .form-card {
+    min-height: auto;
+  }
+
+  .brand-copy {
+    padding: 46px 0 36px;
+  }
+
+  .brand-copy h1 {
+    font-size: 34px;
+  }
+}
+
+@media (max-width: 620px) {
+  .brand-panel,
+  .form-card {
+    border-radius: 20px;
+    padding: 24px;
+  }
+
+  .brand-copy h1 {
+    font-size: 28px;
+  }
+
+  .signal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>
