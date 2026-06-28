@@ -40,12 +40,13 @@ database:
     conn_max_idle_time_secs: 3600
 
 dns:
+  magic_dns: ${HEADSCALE_MAGIC_DNS}
   base_domain: ${HEADSCALE_DNS_DOMAIN}
-  override_local_dns: true
+  override_local_dns: ${HEADSCALE_DNS_OVERRIDE_LOCAL}
   nameservers:
     global:
-      - 1.1.1.1
-      - 8.8.8.8
+${HEADSCALE_DNS_GLOBAL_YAML}
+${HEADSCALE_DNS_SEARCH_YAML}
 
 log:
   level: ${HEADSCALE_LOG_LEVEL}

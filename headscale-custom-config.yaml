@@ -28,6 +28,7 @@ database:
     write_ahead_log: true
 
 dns:
+  magic_dns: true
   base_domain: hs.admin.pro
   override_local_dns: true
   nameservers:

@@ -67,7 +67,7 @@
       </header>
 
       <!-- Headscale 未连接提示 -->
-      <div v-if="!userStore.systemStatus.headscale_healthy && currentPath !== '/settings'" class="hs-alert-wrap">
+      <div v-if="!userStore.systemStatus.headscale_healthy && !currentPath.startsWith('/settings')" class="hs-alert-wrap">
         <el-alert type="warning" :closable="false" show-icon>
           <template #title>
             Headscale 未连接 — 服务未运行或未正确配置，部分功能不可用。
@@ -106,6 +106,7 @@ const sidebarCollapsed = ref(false)
 const currentPath = computed(() => route.path)
 const currentName = computed(() => {
   const map = {
+    '/settings/dns': 'DNS 配置',
     '/traffic': '流量统计',
     '/client-policies': '限速策略',
     '/client-releases': '客户端版本',
@@ -149,6 +150,7 @@ const menuGroups = [
       { name: '分组管理', path: '/groups', icon: markRaw(UserFilled), managerOnly: true },
       { name: 'ACL 规则', path: '/acl', icon: markRaw(SetUp), managerOnly: true },
       { name: '系统设置', path: '/settings', icon: markRaw(Setting), managerOnly: true },
+      { name: 'DNS 配置', path: '/settings/dns', icon: markRaw(Connection), managerOnly: true },
       { name: '操作日志', path: '/logs', icon: markRaw(Tickets), managerOnly: true },
     ],
   },

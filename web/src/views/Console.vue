@@ -236,6 +236,7 @@ const quickActions = [
   { label: '预认证密钥', desc: '创建设备注册密钥', path: '/preauthkeys', icon: markRaw(Key), color: 'rgba(16,185,129,.12)' },
   { label: '路由管理', desc: '管理子网路由通告', path: '/routes', icon: markRaw(Guide), color: 'rgba(6,182,212,.12)' },
   { label: '系统设置', desc: '配置 Headscale 连接', path: '/settings', icon: markRaw(Setting), color: 'rgba(245,158,11,.12)' },
+  { label: 'DNS 配置', desc: '配置 MagicDNS 和下发 DNS', path: '/settings/dns', icon: markRaw(SetUp), color: 'rgba(59,130,246,.12)' },
 ]
 
 function progressColor(v) {

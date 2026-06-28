@@ -38,7 +38,7 @@
         </el-button>
       </div>
 
-      <el-form :model="form" label-width="130px" label-position="right" style="max-width:600px" :disabled="!editMode">
+      <el-form :model="form" label-width="130px" label-position="right" style="max-width:760px" :disabled="!editMode">
         <el-divider content-position="left">Headscale 连接</el-divider>
         <el-form-item label="服务器地址">
           <el-input v-model="form.server_url" placeholder="http://127.0.0.1:18919" />
@@ -49,6 +49,45 @@
             <el-option v-for="n in netInterfaces" :key="n" :label="n" :value="n" />
           </el-select>
           <div class="form-tip">用于流量统计的网卡接口</div>
+        </el-form-item>
+
+        <div ref="dnsSectionRef" class="settings-anchor"></div>
+        <el-divider content-position="left">DNS 下发</el-divider>
+        <el-form-item label="MagicDNS">
+          <el-switch v-model="form.dns_magic_dns" active-text="开启" inactive-text="关闭" />
+          <div class="form-tip">开启后客户端可解析节点名称和服务端下发的 DNS 记录</div>
+        </el-form-item>
+        <el-form-item label="基础域名">
+          <el-input v-model="form.dns_base_domain" placeholder="hs.admin.pro" />
+          <div class="form-tip">例如 hs.admin.pro，客户端节点名称会进入该域名空间</div>
+        </el-form-item>
+        <el-form-item label="覆盖本地 DNS">
+          <el-switch v-model="form.dns_override_local" active-text="使用下发 DNS" inactive-text="仅作备用" />
+          <div class="form-tip">开启后，勾选“采用服务端 DNS”的客户端会优先使用下方 DNS 地址</div>
+        </el-form-item>
+        <el-form-item label="DNS 地址">
+          <el-input
+            v-model="dnsGlobalNameserversText"
+            type="textarea"
+            :rows="4"
+            placeholder="1.1.1.1&#10;8.8.8.8"
+          />
+          <div class="form-tip">每行一个 DNS 地址，保存后需重启 Headscale 服务才会完整生效</div>
+        </el-form-item>
+        <el-form-item label="搜索域">
+          <el-input
+            v-model="dnsSearchDomainsText"
+            type="textarea"
+            :rows="3"
+            placeholder="corp.example.com"
+          />
+          <div class="form-tip">可选，每行一个搜索域；留空则只使用基础域名</div>
+        </el-form-item>
+        <el-form-item label="配置文件">
+          <el-input :model-value="form.headscale_config_path || '未配置 HEADSCALE_CONFIG_PATH'" readonly />
+          <div class="form-tip">
+            {{ form.headscale_config_writable ? '当前配置文件可写，保存会同步写入 Headscale 配置' : '当前配置文件不可写，保存仅会写入 ScaleForge 配置' }}
+          </div>
         </el-form-item>
 
         <el-divider content-position="left">API 密钥</el-divider>
@@ -88,13 +127,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getSettings, updateSettings, refreshApiKey, login } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Lock, Unlock, Check } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
+const route = useRoute()
 const saving = ref(false)
 const refreshing = ref(false)
 const netInterfaces = ref([])
@@ -102,11 +143,21 @@ const editMode = ref(false)
 const pwdDialogVisible = ref(false)
 const confirmPwd = ref('')
 const pwdInputRef = ref(null)
+const dnsSectionRef = ref(null)
+const dnsGlobalNameserversText = ref('')
+const dnsSearchDomainsText = ref('')
 let formBackup = null
 
 const form = ref({
   server_url: '', server_net: '', bearer_token: '',
   headscale_running: false, headscale_version: '',
+  dns_magic_dns: true,
+  dns_base_domain: 'hs.admin.pro',
+  dns_override_local: true,
+  dns_global_nameservers: [],
+  dns_search_domains: [],
+  headscale_config_path: '',
+  headscale_config_writable: false,
 })
 
 const maskedToken = computed(() => {
@@ -125,19 +176,36 @@ async function loadSettings() {
     const res = await getSettings()
     const d = res.data || {}
     form.value = { ...form.value, ...d }
+    dnsGlobalNameserversText.value = (d.dns_global_nameservers || []).join('\n')
+    dnsSearchDomainsText.value = (d.dns_search_domains || []).join('\n')
     netInterfaces.value = d.network_interfaces || []
   } catch {}
 }
 
 function handleUnlock() {
-  formBackup = JSON.parse(JSON.stringify(form.value))
+  formBackup = {
+    form: JSON.parse(JSON.stringify(form.value)),
+    dnsGlobalNameserversText: dnsGlobalNameserversText.value,
+    dnsSearchDomainsText: dnsSearchDomainsText.value,
+  }
   editMode.value = true
 }
 
 function handleLock() {
-  if (formBackup) form.value = JSON.parse(JSON.stringify(formBackup))
+  if (formBackup) {
+    form.value = JSON.parse(JSON.stringify(formBackup.form))
+    dnsGlobalNameserversText.value = formBackup.dnsGlobalNameserversText
+    dnsSearchDomainsText.value = formBackup.dnsSearchDomainsText
+  }
   editMode.value = false
   formBackup = null
+}
+
+function parseLines(value) {
+  return [...new Set(String(value || '')
+    .split(/[\n,，;；\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean))]
 }
 
 // 点击保存 → 弹出密码确认
@@ -158,11 +226,17 @@ async function confirmSave() {
     await updateSettings({
       server_url: form.value.server_url,
       server_net: form.value.server_net,
+      dns_magic_dns: form.value.dns_magic_dns,
+      dns_base_domain: form.value.dns_base_domain,
+      dns_override_local: form.value.dns_override_local,
+      dns_global_nameservers: parseLines(dnsGlobalNameserversText.value),
+      dns_search_domains: parseLines(dnsSearchDomainsText.value),
     })
-    ElMessage.success('设置已保存')
+    ElMessage.success('设置已保存，DNS 变更需重启 Headscale 后生效')
     pwdDialogVisible.value = false
     editMode.value = false
     formBackup = null
+    await loadSettings()
     await userStore.fetchSystemStatus()
   } catch (e) {
     const msg = e?.response?.data?.msg || e?.response?.data?.detail || ''
@@ -195,10 +269,21 @@ async function handleSwitch() {
   } catch {}
 }
 
-onMounted(loadSettings)
+function scrollToRouteSection() {
+  if (route.path !== '/settings/dns') return
+  nextTick(() => dnsSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
+
+watch(() => route.path, scrollToRouteSection)
+
+onMounted(async () => {
+  await loadSettings()
+  scrollToRouteSection()
+})
 </script>
 
 <style scoped>
+.settings-anchor { scroll-margin-top: 84px; }
 .form-tip { font-size: 12px; color: var(--v3s-text-muted); margin-top: 4px; line-height: 1.4; }
 
 .edit-guard {

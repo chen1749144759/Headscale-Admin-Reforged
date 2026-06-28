@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
+import os
 import yaml
+
+
+def env_bool(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ('0', 'false', 'no', 'off')
+
+
+def env_list(name, default):
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    return [item.strip() for item in raw.replace(';', ',').split(',') if item.strip()]
+
 
 config = {
     'server_url': 'http://127.0.0.1:18557',
@@ -35,11 +51,13 @@ config = {
         }
     },
     'dns': {
-        'base_domain': 'hs.admin.pro',
-        'override_local_dns': True,
+        'magic_dns': env_bool('HEADSCALE_MAGIC_DNS', True),
+        'base_domain': os.environ.get('HEADSCALE_DNS_DOMAIN', 'hs.admin.pro'),
+        'override_local_dns': env_bool('HEADSCALE_DNS_OVERRIDE_LOCAL', True),
         'nameservers': {
-            'global': ['1.1.1.1', '8.8.8.8']
-        }
+            'global': env_list('HEADSCALE_DNS_GLOBAL', ['1.1.1.1', '8.8.8.8'])
+        },
+        'search_domains': env_list('HEADSCALE_DNS_SEARCH_DOMAINS', [])
     },
     'log': {
         'level': 'info',

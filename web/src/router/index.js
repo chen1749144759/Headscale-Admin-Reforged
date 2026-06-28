@@ -29,6 +29,7 @@ const routes = [
       { path: 'acl', name: 'ACL', component: () => import('@/views/Acl.vue'), meta: { requiresManager: true } },
       { path: 'preauthkeys', name: 'Preauthkeys', component: () => import('@/views/Preauthkeys.vue') },
       { path: 'settings', name: 'Settings', component: () => import('@/views/Settings.vue'), meta: { requiresManager: true } },
+      { path: 'settings/dns', name: 'DnsSettings', component: () => import('@/views/Settings.vue'), meta: { requiresManager: true } },
       { path: 'logs', name: 'Logs', component: () => import('@/views/Logs.vue'), meta: { requiresManager: true } },
       { path: 'profile', name: 'Profile', component: () => import('@/views/Profile.vue') },
       { path: 'password', name: 'Password', component: () => import('@/views/Password.vue') },
