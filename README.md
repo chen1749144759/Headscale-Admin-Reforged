@@ -172,6 +172,14 @@ ScaleForge 负责看得见和管得动；Headscale-Admin-AE 负责控制协议�
 - IP 定位是可选增强能力，未配置不会报错。
 - 如果数据库用户没有建表/建索引权限，首次启动会影响新增功能表初始化。
 
+## 交流学习
+
+欢迎加入 ScaleForge 交流群，一起交流自建 Headscale、ScaleTail、ScaleForge 的部署、使用和二次开发经验。
+
+群号：`1041671099`
+
+<img src="docs/images/scaleforge-qq-group.jpg" alt="ScaleForge 交流群" width="360">
+
 ## 打赏
 
 如果这个项目帮你节省了部署和维护时间，可以请作者喝杯咖啡：
