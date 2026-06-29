@@ -163,6 +163,10 @@ docker push chenzeshi/scaleforge-nginx:YYYYMMDD-commit
 ## 提交规则
 
 - 提交前运行与改动相关的最小验证。
+- 每次改动完成后，默认必须完成最小验证、提交并 push 到当前远端分支。
+- 除非用户明确说“先别提交”“先别 push”“只本地改”，否则不要停在未提交或只本地提交状态。
+- 如果同一轮涉及 `ScaleTail`、`ScaleForge`、`Headscale-Admin-AE` 多仓库，必须分别提交并分别 push。
+- 如果发现已有未提交改动，先区分本次改动和用户已有改动，向用户说明后再决定是否纳入提交；不要混入未确认的无关改动。
 - 提交信息要说明业务含义，例如 `feat: add managed DNS settings`。
 - README、部署文档、Docker Compose、前后端接口字段同时变化时，必须一起核对，避免页面能保存但容器环境不生效。
-- 推送前确认 `git status --short --branch`，不要夹带临时构建产物或密钥文件。
+- 推送前确认 `git status --short --branch`，不要夹带临时构建产物或密钥文件；推送后再次确认工作区状态。
