@@ -323,6 +323,9 @@ def ensure_observability_schema():
             title TEXT,
             description TEXT,
             download_url TEXT,
+            sha256 TEXT,
+            signature TEXT,
+            file_size BIGINT,
             release_notes TEXT,
             enabled BOOLEAN DEFAULT TRUE,
             created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -330,6 +333,9 @@ def ensure_observability_schema():
             updated_at TIMESTAMP DEFAULT NOW()
         )
         """,
+        "ALTER TABLE client_releases ADD COLUMN IF NOT EXISTS sha256 TEXT",
+        "ALTER TABLE client_releases ADD COLUMN IF NOT EXISTS signature TEXT",
+        "ALTER TABLE client_releases ADD COLUMN IF NOT EXISTS file_size BIGINT",
         "CREATE INDEX IF NOT EXISTS idx_client_policies_scope ON client_policies(scope)",
         "CREATE INDEX IF NOT EXISTS idx_client_policies_group_id ON client_policies(group_id)",
         "CREATE INDEX IF NOT EXISTS idx_client_policies_machine_id ON client_policies(machine_id)",

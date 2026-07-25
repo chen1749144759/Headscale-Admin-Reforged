@@ -34,6 +34,15 @@
             <span v-else class="muted">未配置</span>
           </template>
         </el-table-column>
+        <el-table-column label="OTA 校验" width="160">
+          <template #default="{ row }">
+            <div v-if="row.sha256 && row.signature && row.file_size" class="integrity-cell">
+              <el-tag type="success" effect="plain">已签名</el-tag>
+              <span>{{ formatBytes(row.file_size) }}</span>
+            </div>
+            <el-tag v-else type="danger" effect="plain">不可自动安装</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" effect="plain">{{ row.enabled ? '启用' : '停用' }}</el-tag>
@@ -52,16 +61,21 @@
       </el-table>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑客户端版本' : '发布新版本'" width="620px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑客户端版本' : '发布新版本'" width="680px" destroy-on-close>
       <el-form label-width="100px">
+        <el-form-item label="签名元数据">
+          <el-upload accept=".json,application/json" :auto-upload="false" :show-file-list="false" :on-change="importMetadata">
+            <el-button>导入构建生成的 .ota.json</el-button>
+          </el-upload>
+          <span class="unit">自动填入版本、平台、SHA-256、大小和签名。</span>
+        </el-form-item>
         <el-form-item label="版本号">
           <el-input v-model="form.version" placeholder="例如 0.0.2" />
         </el-form-item>
         <el-form-item label="平台">
           <el-select v-model="form.platform" filterable allow-create default-first-option style="width: 100%">
             <el-option label="Windows x64" value="windows-amd64" />
-            <el-option label="Windows 通用" value="windows" />
-            <el-option label="全部平台" value="all" />
+            <el-option label="Windows ARM64" value="windows-arm64" />
           </el-select>
         </el-form-item>
         <el-form-item label="更新类型">
@@ -75,6 +89,16 @@
         </el-form-item>
         <el-form-item label="下载地址">
           <el-input v-model="form.download_url" placeholder="https://..." />
+        </el-form-item>
+        <el-form-item label="SHA-256">
+          <el-input v-model="form.sha256" maxlength="64" placeholder="64 位十六进制摘要" />
+        </el-form-item>
+        <el-form-item label="安装包大小">
+          <el-input-number v-model="form.file_size" :min="1" :max="1073741824" :step="1048576" controls-position="right" />
+          <span class="unit">字节</span>
+        </el-form-item>
+        <el-form-item label="Ed25519 签名">
+          <el-input v-model="form.signature" type="textarea" :rows="3" placeholder="Base64 签名" />
         </el-form-item>
         <el-form-item label="说明">
           <el-input v-model="form.description" type="textarea" :rows="3" maxlength="300" show-word-limit />
@@ -120,6 +144,9 @@ const emptyForm = {
   title: '',
   description: '',
   download_url: '',
+  sha256: '',
+  signature: '',
+  file_size: 0,
   release_notes: '',
   enabled: true,
 }
@@ -157,6 +184,22 @@ function openEdit(row) {
   dialogVisible.value = true
 }
 
+async function importMetadata(uploadFile) {
+  try {
+    const raw = uploadFile.raw
+    if (!raw) return
+    const metadata = JSON.parse(await raw.text())
+    form.version = String(metadata.version || '').trim()
+    form.platform = String(metadata.platform || 'windows-amd64').trim().toLowerCase()
+    form.sha256 = String(metadata.sha256 || '').trim().toLowerCase()
+    form.signature = String(metadata.signature || '').trim()
+    form.file_size = Number(metadata.file_size || 0)
+    ElMessage.success('签名元数据已导入')
+  } catch {
+    ElMessage.error('签名元数据文件格式无效')
+  }
+}
+
 function validateForm() {
   if (!String(form.version || '').trim()) {
     ElMessage.warning('请填写版本号')
@@ -170,7 +213,26 @@ function validateForm() {
     ElMessage.warning('下载地址必须以 http:// 或 https:// 开头')
     return false
   }
+  if (!/^[a-f0-9]{64}$/i.test(String(form.sha256 || '').trim())) {
+    ElMessage.warning('请填写有效的 SHA-256')
+    return false
+  }
+  if (!Number.isSafeInteger(Number(form.file_size)) || Number(form.file_size) <= 0) {
+    ElMessage.warning('请填写有效的安装包大小')
+    return false
+  }
+  if (!String(form.signature || '').trim()) {
+    ElMessage.warning('请填写 Ed25519 签名')
+    return false
+  }
   return true
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0)
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`
+  return `${bytes} B`
 }
 
 async function saveRelease() {
@@ -217,5 +279,13 @@ onMounted(loadReleases)
 
 .muted {
   color: var(--v3s-text-muted);
+}
+
+.integrity-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--v3s-text-muted);
+  font-size: 12px;
 }
 </style>

@@ -128,6 +128,9 @@ def _release_payload(row: dict[str, Any]) -> dict[str, Any]:
         "title": row.get("title") or "",
         "description": row.get("description") or "",
         "download_url": row.get("download_url") or "",
+        "sha256": row.get("sha256") or "",
+        "signature": row.get("signature") or "",
+        "file_size": int(row.get("file_size") or 0),
         "release_notes": row.get("release_notes") or "",
         "created_at": row.get("created_at") or "",
     }
@@ -735,7 +738,7 @@ def client_update(
             """
             SELECT
                 id, version, platform, update_type, title, description,
-                download_url, release_notes,
+                download_url, sha256, signature, file_size, release_notes,
                 TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at
             FROM client_releases
             WHERE enabled = TRUE

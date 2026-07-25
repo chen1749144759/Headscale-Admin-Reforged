@@ -5,13 +5,20 @@
 [![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Element Plus](https://img.shields.io/badge/Element%20Plus-2.x-409EFF)](https://element-plus.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](#部署难度)
-[![Headscale](https://img.shields.io/badge/Headscale--Admin--AE-v0.28.0%20%2B%20v0.29.1%20fixes-326CE5)](https://github.com/chen1749144759/Headscale-Admin-AE)
+[![Headscale](https://img.shields.io/badge/Headscale--Admin--AE-v0.28.0%20%2B%20v0.29.2%20fixes-326CE5)](https://github.com/chen1749144759/Headscale-Admin-AE)
 
 ScaleForge 是面向自建 Headscale/ScaleTail 网络的 Web 管理平台。它提供图形化的用户、节点、路由、ACL、预认证密钥、流量统计、客户端策略和安全审计能力，推荐与 `Headscale-Admin-AE` 和 `ScaleTail` 一起部署。
 
 仓库地址：[chen1749144759/ScaleForge](https://github.com/chen1749144759/ScaleForge)
 
 ## 最近更新
+
+### 2026-07 客户端签名 OTA
+
+- 客户端版本发布新增 SHA-256、安装包大小和 Ed25519 签名元数据，旧数据库会在启动时自动增量补列。
+- 版本发布页可直接导入 ScaleTail 构建生成的 `.ota.json`，减少手工录入错误。
+- ScaleTail Windows 客户端可后台下载并静默覆盖安装；强制更新与建议更新继续使用原有发布策略。
+- 下载地址只负责传输，安装权限由客户端内置公钥和 `scaletaild` 二次验签控制。
 
 ### 2026-06-24 管理端视觉与流量统计更新
 
@@ -29,8 +36,8 @@ ScaleForge 是面向自建 Headscale/ScaleTail 网络的 Web 管理平台。它�
 |---|---|
 | 裂变来源 | 基于 `arounyf/Headscale-Admin-Pro v4.0.0` 的产品思路和管理能力重写 |
 | 架构变化 | 从 Flask/Jinja 单体管理面板重构为 FastAPI + Vue 3 前后端分离架构 |
-| 当前对标 | 配套 `Headscale-Admin-AE`，其基础为官方 headscale `v0.28.0`，并已回补官方 headscale `v0.29.1` 关键修复 |
-| 客户端对标 | 配套 `ScaleTail`，客户端核心按 Tailscale `v1.98.5` 关键修复审计 |
+| 当前对标 | 配套 `Headscale-Admin-AE`，其基础为官方 headscale `v0.28.0`，并已回补官方 headscale `v0.29.2` 关键修复 |
+| 客户端对标 | 配套 `ScaleTail`，客户端核心按 Tailscale `v1.98.9` 关键修复审计 |
 | 默认数据库 | PostgreSQL 16，开发环境可使用 SQLite |
 | 默认部署 | Docker Compose |
 
@@ -50,7 +57,7 @@ ScaleForge 本身不是 headscale 控制面进程，它是管理平台。真正�
 - 流量统计：按全局、分组、机器展示收发流量、峰值速率和采样记录。
 - 请求分析：接收 ScaleTail 客户端上报的连接摘要，统计目标 IP、端口、进程和连接次数。
 - 客户端策略：配置全局、分组、机器三层上传限速、下载限速字段、月流量配额、超额动作。
-- 客户端版本发布：发布 ScaleTail 客户端建议更新/强制更新策略，客户端通过上报通道检查新版本并弹出更新提示。
+- 客户端版本发布：发布建议更新/强制更新策略，管理 SHA-256、Ed25519 签名和包大小，支持 Windows 客户端签名 OTA 静默覆盖安装。
 - 安全审计：安全事件、IP 观测历史、可信网络、风险规则管理。
 - IP 定位：支持可选外部 IP 地理信息接口；未配置时不会影响上报，只是不补充地理字段。
 - 客户端上报接口：使用 `SCALETAIL_CLIENT_TOKEN` 或 `config.yaml: client_report_token` 作为共享密钥。
@@ -69,7 +76,7 @@ ScaleForge 本身不是 headscale 控制面进程，它是管理平台。真正�
 | `security_events` | 安全事件 |
 | `trusted_networks` | 可信 IP/CIDR/ASN/国家规则 |
 | `risk_rules` | 安全风险规则配置 |
-| `client_releases` | ScaleTail 客户端版本发布和强制/建议更新策略 |
+| `client_releases` | ScaleTail 客户端版本、强制/建议更新及 OTA 完整性元数据 |
 
 这些表也会在 `Headscale-Admin-AE` 启动时同步创建，避免服务端和管理平台字段不一致。
 

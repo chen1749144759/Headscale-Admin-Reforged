@@ -2,6 +2,10 @@
 客户端版本发布路由。
 管理端用于发布 ScaleTail 客户端版本，客户端通过 client-reports 通道读取最新可用版本。
 """
+import base64
+import binascii
+import re
+
 import psycopg2.extras
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -11,6 +15,8 @@ from .dependencies import CurrentUser, get_db_conn, record_log, require_manager
 router = APIRouter(prefix="/api/client-releases", tags=["客户端版本"])
 
 UPDATE_TYPES = ("suggested", "forced")
+SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
+MAX_INSTALLER_SIZE = 1024 * 1024 * 1024
 
 
 class ClientReleaseReq(BaseModel):
@@ -20,6 +26,9 @@ class ClientReleaseReq(BaseModel):
     title: str = ""
     description: str = ""
     download_url: str = ""
+    sha256: str = ""
+    signature: str = ""
+    file_size: int = 0
     release_notes: str = ""
     enabled: bool = True
 
@@ -35,6 +44,8 @@ def _clean_release(req: ClientReleaseReq) -> ClientReleaseReq:
     req.title = str(req.title or "").strip()
     req.description = str(req.description or "").strip()
     req.download_url = str(req.download_url or "").strip()
+    req.sha256 = str(req.sha256 or "").strip().lower()
+    req.signature = str(req.signature or "").strip()
     req.release_notes = str(req.release_notes or "").strip()
 
     if not req.version:
@@ -47,6 +58,16 @@ def _clean_release(req: ClientReleaseReq) -> ClientReleaseReq:
         raise HTTPException(400, "下载地址不能为空")
     if not req.download_url.lower().startswith(("http://", "https://")):
         raise HTTPException(400, "下载地址必须以 http:// 或 https:// 开头")
+    if not SHA256_PATTERN.fullmatch(req.sha256):
+        raise HTTPException(400, "SHA-256 必须是 64 位十六进制字符串")
+    try:
+        signature = base64.b64decode(req.signature, validate=True)
+    except (ValueError, binascii.Error):
+        raise HTTPException(400, "Ed25519 签名必须是有效的 Base64")
+    if len(signature) != 64:
+        raise HTTPException(400, "Ed25519 签名长度无效")
+    if req.file_size <= 0 or req.file_size > MAX_INSTALLER_SIZE:
+        raise HTTPException(400, "安装包大小必须在 1 字节到 1 GiB 之间")
     return req
 
 
@@ -59,7 +80,8 @@ def list_releases(user: CurrentUser = Depends(require_manager)):
             """
             SELECT
                 id, version, platform, update_type, title, description,
-                download_url, release_notes, enabled, created_by,
+                download_url, sha256, signature, file_size,
+                release_notes, enabled, created_by,
                 TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
                 TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') AS updated_at
             FROM client_releases
@@ -81,8 +103,9 @@ def create_release(req: ClientReleaseReq, user: CurrentUser = Depends(require_ma
             """
             INSERT INTO client_releases (
                 version, platform, update_type, title, description,
-                download_url, release_notes, enabled, created_by
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                download_url, sha256, signature, file_size,
+                release_notes, enabled, created_by
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -92,6 +115,9 @@ def create_release(req: ClientReleaseReq, user: CurrentUser = Depends(require_ma
                 req.title,
                 req.description,
                 req.download_url,
+                req.sha256,
+                req.signature,
+                req.file_size,
                 req.release_notes,
                 req.enabled,
                 user.id,
@@ -118,7 +144,8 @@ def update_release(release_id: int, req: ClientReleaseReq, user: CurrentUser = D
             """
             UPDATE client_releases SET
                 version=%s, platform=%s, update_type=%s, title=%s, description=%s,
-                download_url=%s, release_notes=%s, enabled=%s, updated_at=NOW()
+                download_url=%s, sha256=%s, signature=%s, file_size=%s,
+                release_notes=%s, enabled=%s, updated_at=NOW()
             WHERE id=%s
             """,
             (
@@ -128,6 +155,9 @@ def update_release(release_id: int, req: ClientReleaseReq, user: CurrentUser = D
                 req.title,
                 req.description,
                 req.download_url,
+                req.sha256,
+                req.signature,
+                req.file_size,
                 req.release_notes,
                 req.enabled,
                 release_id,
