@@ -20,6 +20,13 @@ ScaleForge 是面向自建 Headscale/ScaleTail 网络的 Web 管理平台。它�
 - ScaleTail Windows 客户端可后台下载并静默覆盖安装；强制更新与建议更新继续使用原有发布策略。
 - 下载地址只负责传输，安装权限由客户端内置公钥和 `scaletaild` 二次验签控制。
 
+### 2026-07-27 配套发布
+
+- ScaleTail `v0.0.7` 增加签名 OTA 引导和 TUN 双向总带宽整形，ScaleForge 继续负责建议更新、强制更新、策略下发和状态回传。
+- 本次 Docker Hub 固定镜像为 `chenzeshi/scaleforge-backend:20260727-577ff10`、`chenzeshi/scaleforge-nginx:20260727-577ff10`。
+- 配套控制端镜像为 `chenzeshi/headscale-admin-ae:20260727-387705f`，同时更新三个镜像的 `latest` 标签。
+- 生产环境推荐固定版本标签；`latest` 适合首次体验，不适合作为无法追溯的长期生产版本。
+
 ### 2026-06-24 管理端视觉与流量统计更新
 
 - 重设计登录页，保留原有账号、验证码、初始化入口逻辑，统一为 ScaleForge 私有网络控制台风格。
@@ -108,16 +115,81 @@ ScaleForge 登录页使用的是 [Cap CAPTCHA](https://trycap.dev/guide/)：
 - 后端二次校验使用 `CAPTCHA_SITEVERIFY_URL` 和 `CAPTCHA_SECRET_KEY`；secret 只写入真实部署 `.env`，不要提交到 Git。
 - 官方文档：[Cap Quickstart](https://trycap.dev/guide/)，源码仓库：[tiagozip/cap](https://github.com/tiagozip/cap)。
 
-## 快速部署
+## Docker Compose 首次部署
 
-推荐使用 Docker Compose：
+1. 准备安装了 Docker Engine、Compose v2 和 Git 的 Linux 主机。
+2. 克隆仓库并创建部署配置：
 
 ```bash
-cd docker
+git clone https://github.com/chen1749144759/ScaleForge.git
+cd ScaleForge/docker
 cp .env.example .env
-# 修改 .env 中的域名、数据库、token、DERP 和管理员配置
-docker compose up -d
 ```
+
+3. 编辑 `.env`，至少修改下面这些值：
+
+```dotenv
+HEADSCALE_SERVER_URL=https://vpn.example.com
+HS_PORT=8080
+WEB_PORT=80
+
+AE_VERSION=20260727-387705f
+BACKEND_VERSION=20260727-577ff10
+NGINX_VERSION=20260727-577ff10
+
+POSTGRES_PASSWORD=请替换为随机强密码
+SECRET_KEY=请替换为随机强密钥
+SCALETAIL_CLIENT_TOKEN=请替换为独立随机Token
+```
+
+可以使用 `openssl rand -hex 32` 分别生成 `SECRET_KEY` 和 `SCALETAIL_CLIENT_TOKEN`。两者用途不同，不能共用；真实值只能保存在部署机 `.env`，不能提交到 Git 或写进公开客户端安装包。
+
+4. 如需验证码，先按“验证码服务”章节部署 Cap，再填写同一站点对应的 challenge、siteverify 和 secret；暂时不用时设置 `CAPTCHA_ENABLED=false`。
+5. 检查最终配置并启动：
+
+```bash
+docker compose config
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+6. 完成健康检查：
+
+```bash
+curl -fsS http://127.0.0.1/api/health
+curl -fsS http://127.0.0.1:8080/health
+curl -sI http://127.0.0.1/ | head
+```
+
+首次启动会创建业务表和索引。数据库账号必须拥有建表、添加字段和创建索引权限；不要预先建立一套字段不完整的同名表。
+
+## 保留数据升级
+
+升级不会要求删除 PostgreSQL 数据卷。启动时会对缺少的业务表、字段和索引执行增量初始化：
+
+```bash
+cd ScaleForge
+git pull --ff-only
+cd docker
+
+cp .env .env.backup-$(date +%Y%m%d-%H%M%S)
+# 将 AE_VERSION、BACKEND_VERSION、NGINX_VERSION 更新为上文固定标签
+docker compose config
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+升级后重新执行两个健康检查，并查看最近日志：
+
+```bash
+docker compose logs --tail=100 headscale admin-backend nginx
+curl -fsS http://127.0.0.1/api/health
+curl -fsS http://127.0.0.1:8080/health
+```
+
+禁止执行 `docker compose down -v`，它会删除数据库和 Headscale 状态卷。升级前建议额外执行 PostgreSQL 逻辑备份；出现问题时把 `.env` 的三个版本变量改回旧标签，再执行 `docker compose up -d` 回滚镜像，数据库备份用于处理不可逆的数据迁移。
 
 常见端口：
 
@@ -128,6 +200,8 @@ docker compose up -d
 | Headscale-Admin-AE | 8080 |
 | PostgreSQL | 5432 |
 | DERP/STUN | 3478/3479，按 compose 配置为准 |
+
+公网只需要开放实际使用的 Web、Headscale 和 DERP/STUN 端口。PostgreSQL `5432`、ScaleForge 后端 `5175` 和容器内部管理接口不应直接暴露到公网，建议由 Nginx 和主机防火墙统一收口。
 
 ## 本地开发
 
