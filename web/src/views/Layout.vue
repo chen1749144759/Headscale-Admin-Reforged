@@ -112,7 +112,7 @@ const currentName = computed(() => {
     '/client-releases': '客户端版本',
     '/security': '安全中心',
     '/console': '控制台', '/users': '用户管理', '/groups': '分组管理',
-    '/routes': '路由管理', '/acl': 'ACL 规则', '/preauthkeys': '预认证密钥',
+    '/routes': '路由管理', '/acl': 'ACL 规则', '/accounts': '平台账户',
     '/settings': '系统设置', '/logs': '操作日志', '/profile': '个人资料',
     '/password': '修改密码', '/deploy': '部署帮助',
   }
@@ -126,7 +126,7 @@ const menuGroups = [
       { name: '流量统计', path: '/traffic', icon: markRaw(DataAnalysis) },
       { name: '限速策略', path: '/client-policies', icon: markRaw(Setting), managerOnly: true },
       { name: '客户端版本', path: '/client-releases', icon: markRaw(Document), managerOnly: true },
-      { name: '安全中心', path: '/security', icon: markRaw(Tickets) },
+      { name: '安全中心', path: '/security', icon: markRaw(Tickets), managerOnly: true },
     ],
   },
   {
@@ -140,7 +140,6 @@ const menuGroups = [
     items: [
       { name: '用户管理', path: '/users', icon: markRaw(Connection) },
       { name: '路由管理', path: '/routes', icon: markRaw(Guide) },
-      { name: '预认证密钥', path: '/preauthkeys', icon: markRaw(Key) },
     ],
   },
   {
@@ -148,6 +147,7 @@ const menuGroups = [
     managerOnly: true,
     items: [
       { name: '分组管理', path: '/groups', icon: markRaw(UserFilled), managerOnly: true },
+      { name: '平台账户', path: '/accounts', icon: markRaw(User), managerOnly: true },
       { name: 'ACL 规则', path: '/acl', icon: markRaw(SetUp), managerOnly: true },
       { name: '系统设置', path: '/settings', icon: markRaw(Setting), managerOnly: true },
       { name: 'DNS 配置', path: '/settings/dns', icon: markRaw(Connection), managerOnly: true },
@@ -157,7 +157,7 @@ const menuGroups = [
   {
     label: '帮助',
     items: [
-      { name: '部署帮助', path: '/deploy', icon: markRaw(HelpFilled) },
+      { name: '部署帮助', path: '/deploy', icon: markRaw(HelpFilled), managerOnly: true },
     ],
   },
 ]

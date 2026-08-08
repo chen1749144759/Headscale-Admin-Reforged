@@ -83,8 +83,7 @@
           </el-form>
 
           <div class="form-footer">
-            <span v-if="openReg">首次登录？<router-link to="/register" class="link-primary">初始化系统</router-link></span>
-            <span v-else>首次登录？请联系管理员创建账户</span>
+            <span>首次部署请使用 Headscale bootstrap secret 创建的管理员账户</span>
             <small>ScaleForge 管理端入口</small>
           </div>
         </div>
@@ -99,6 +98,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { login, getPublicStatus } from '@/api'
 import { ElMessage } from 'element-plus'
+import '@cap.js/widget'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -110,7 +110,6 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 const loading = ref(false)
-const openReg = ref(false)
 
 // ─── 挑战验证码 ───
 const capWidgetRef = ref(null)
@@ -121,8 +120,7 @@ const captchaKey = ref(0)
 const captchaError = ref('')
 const captchaEnabled = ref(true)
 const captchaConfig = reactive({
-  apiEndpoint: 'http://10.2.1.100:30030/62f60ca190/',
-  widgetSrc: 'https://cdn.jsdelivr.net/npm/cap-widget',
+  apiEndpoint: '',
 })
 
 function onCaptchaSolve(event) {
@@ -138,55 +136,6 @@ function resetCaptcha() {
   captchaKey.value += 1
 }
 
-function loadCaptchaScript(src) {
-  return new Promise((resolve, reject) => {
-    if (!src) return reject(new Error('empty captcha widget src'))
-    if (window.customElements?.get('cap-widget')) return resolve()
-
-    const waitForDefinition = () => {
-      if (!window.customElements?.whenDefined) return resolve()
-
-      const timer = window.setTimeout(() => {
-        reject(new Error('captcha widget registration timeout'))
-      }, 8000)
-
-      window.customElements.whenDefined('cap-widget')
-        .then(() => {
-          window.clearTimeout(timer)
-          resolve()
-        })
-        .catch((error) => {
-          window.clearTimeout(timer)
-          reject(error)
-        })
-    }
-
-    const existing = document.querySelector('script[data-cap-widget]')
-    if (existing) {
-      if (existing.dataset.loaded === 'true') {
-        waitForDefinition()
-        return
-      }
-
-      existing.addEventListener('load', waitForDefinition, { once: true })
-      existing.addEventListener('error', reject, { once: true })
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = src
-    script.type = 'module'
-    script.async = true
-    script.dataset.capWidget = 'true'
-    script.onload = () => {
-      script.dataset.loaded = 'true'
-      waitForDefinition()
-    }
-    script.onerror = reject
-    document.head.appendChild(script)
-  })
-}
-
 // ─── 登录逻辑 ───
 async function handleLogin() {
   if (captchaEnabled.value && !verified.value) return ElMessage.warning('请先完成验证码')
@@ -194,10 +143,11 @@ async function handleLogin() {
   loading.value = true
   try {
     const res = await login({ ...form, captchaToken: captchaToken.value })
-    userStore.setToken(res.data.token)
-    userStore.userInfo = res.data.user
+    userStore.acceptSession(res.data.user)
     ElMessage.success('登录成功')
-    const target = res.data.user.role === 'manager' ? '/console' : '/users'
+    const target = res.data.mustChangePassword
+      ? '/password'
+      : (res.data.user.role === 'manager' ? '/console' : '/users')
     router.push(target)
   } catch {
     resetCaptcha()
@@ -286,25 +236,20 @@ onMounted(async () => {
   try {
     const res = await getPublicStatus()
     const data = res.data || {}
-    openReg.value = data.initialized === false
     userStore.systemStatus = data || userStore.systemStatus
 
     const captcha = data.captcha || {}
     captchaEnabled.value = captcha.enabled !== false
     captchaConfig.apiEndpoint = captcha.api_endpoint || captchaConfig.apiEndpoint
-    captchaConfig.widgetSrc = captcha.widget_src || captchaConfig.widgetSrc
+    captchaReady.value = Boolean(captchaConfig.apiEndpoint)
+    if (captchaEnabled.value && !captchaReady.value) {
+      captchaError.value = '验证码服务未配置'
+    }
   } catch {
     captchaError.value = '验证码配置加载失败，请检查 /api/public/status 是否可访问'
   }
 
-  if (captchaEnabled.value) {
-    try {
-      await loadCaptchaScript(captchaConfig.widgetSrc)
-      captchaReady.value = true
-    } catch {
-      captchaError.value = '验证码加载失败，请刷新页面重试'
-    }
-  } else {
+  if (!captchaEnabled.value) {
     verified.value = true
   }
 

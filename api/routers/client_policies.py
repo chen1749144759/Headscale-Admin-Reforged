@@ -70,7 +70,7 @@ def create_policy(req: PolicyReq, user: CurrentUser = Depends(require_manager)):
             INSERT INTO client_policies (
                 scope, group_id, group_name, machine_id, machine_name,
                 rate_up_mbps, rate_down_mbps, monthly_quota_gb,
-                exceed_action, enabled, priority, created_by, remark
+                exceed_action, enabled, priority, created_by_account_id, remark
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
@@ -130,7 +130,8 @@ def policy_states(user: CurrentUser = Depends(require_manager)):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             SELECT
-                id, policy_id, machine_id, machine_name, applied, error,
+                id, machine_id, machine_name, policy_revision,
+                matched_policy_ids, applied, error,
                 TO_CHAR(applied_at, 'YYYY-MM-DD HH24:MI:SS') AS applied_at,
                 TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') AS updated_at
             FROM client_policy_states
@@ -140,4 +141,3 @@ def policy_states(user: CurrentUser = Depends(require_manager)):
         return {'code': 0, 'data': cur.fetchall()}
     finally:
         conn.close()
-

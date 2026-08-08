@@ -1,16 +1,15 @@
-"""
-公共依赖模块
-包含数据库连接、JWT工具、用户认证等公共功能
-"""
+"""数据库、平台会话与权限公共依赖。"""
+import ipaddress
 import os
+from urllib.parse import urlsplit
+
 import psycopg2
 import psycopg2.extras
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any
 
 from fastapi import Depends, HTTPException, Request
-from jose import JWTError, jwt
-# from passlib.hash import bcrypt  # removed: using native bcrypt in auth.py
+
+from .headscale_client import HeadscaleUnavailable, request as headscale_request, response_error
 
 # ─── 配置加载 ─────────────────────────────────────────────
 from ruamel.yaml import YAML
@@ -53,13 +52,6 @@ def load_config():
     with open(CONFIG_PATH, 'r') as f:
         return yaml.load(f) or {}
 
-def save_config(updates: dict):
-    """保存配置更新"""
-    global CFG
-    CFG.update(updates)
-    with open(CONFIG_PATH, 'w') as f:
-        yaml.dump(CFG, f)
-
 CFG = load_config()
 
 # 全局配置 — 环境变量优先，config.yaml 兜底
@@ -81,32 +73,55 @@ def _build_database_dsn():
     return CFG.get('database', {}).get('postgresql', {}).get('dsn', '')
 
 DATABASE_DSN = _build_database_dsn()
-SERVER_HOST = os.environ.get('HEADSCALE_URL') or CFG.get('server_url', {}).get('headscale', 'http://127.0.0.1:8080')
-BEARER_TOKEN = os.environ.get('HEADSCALE_API_KEY') or CFG.get('bearer_token', '')
-SERVER_URL = CFG.get('server_url', {}).get('headscale', '')
-SERVER_NET = CFG.get('server_net', '')
-DEFAULT_REG_DAYS = int(os.environ.get('DEFAULT_REG_DAYS', 0) or CFG.get('default_reg_days', 7))
-DEFAULT_NODE_COUNT = int(os.environ.get('DEFAULT_NODE_COUNT', 0) or CFG.get('default_node_count', 2))
-SECRET_KEY = os.environ.get('SECRET_KEY') or CFG.get('secret_key', 'change-me')
-JWT_ALGORITHM = 'HS256'
-JWT_EXPIRE_SECONDS = 86400  # 24h
+SERVER_URL = (
+    os.environ.get('HEADSCALE_PUBLIC_URL')
+    or CFG.get('server_url', {}).get('headscale', '')
+)
+SESSION_COOKIE_NAME = 'scaleforge_session'
+SESSION_COOKIE_SECURE = os.environ.get(
+    'SESSION_COOKIE_SECURE',
+    'true',
+).strip().lower() not in ('0', 'false', 'no', 'off')
+TRUSTED_ORIGINS = tuple(
+    origin.strip()
+    for origin in os.environ.get('TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+)
 _CAPTCHA_CFG = CFG.get('captcha', {}) or {}
 _CAPTCHA_ENABLED_RAW = os.environ.get(
     'CAPTCHA_ENABLED',
     str(_CAPTCHA_CFG.get('enabled', 'true'))
 )
 CAPTCHA_ENABLED = str(_CAPTCHA_ENABLED_RAW).lower() not in ('0', 'false', 'no', 'off')
-CAPTCHA_WIDGET_SRC = (
-    os.environ.get('CAPTCHA_WIDGET_SRC')
-    or _CAPTCHA_CFG.get('widget_src')
-    or 'https://cdn.jsdelivr.net/npm/cap-widget'
-)
-CAPTCHA_API_ENDPOINT = (
+
+
+def trusted_service_url(value: str) -> str:
+    value = str(value or '').strip()
+    if not value:
+        return ''
+    try:
+        parsed = urlsplit(value)
+        _ = parsed.port
+        hostname = parsed.hostname or ''
+        if parsed.username is not None or parsed.password is not None or parsed.fragment:
+            return ''
+        if parsed.scheme == 'https' and hostname:
+            return value
+        if parsed.scheme != 'http' or not hostname:
+            return ''
+        if hostname.lower() == 'localhost' or ipaddress.ip_address(hostname).is_loopback:
+            return value
+    except ValueError:
+        return ''
+    return ''
+
+
+CAPTCHA_API_ENDPOINT = trusted_service_url(
     os.environ.get('CAPTCHA_API_ENDPOINT')
     or _CAPTCHA_CFG.get('api_endpoint')
-    or 'http://10.2.1.100:30030/62f60ca190/'
+    or ''
 )
-CAPTCHA_SITEVERIFY_URL = (
+CAPTCHA_SITEVERIFY_URL = trusted_service_url(
     os.environ.get('CAPTCHA_SITEVERIFY_URL')
     or _CAPTCHA_CFG.get('siteverify_url')
     or ''
@@ -116,15 +131,6 @@ CAPTCHA_SECRET_KEY = (
     or _CAPTCHA_CFG.get('secret_key')
     or ''
 )
-
-# Docker 环境：尝试从共享卷读取 API Key
-_API_KEY_FILE = os.environ.get('API_KEY_FILE', '/data/headscale/api.key')
-if not BEARER_TOKEN and os.path.isfile(_API_KEY_FILE):
-    try:
-        with open(_API_KEY_FILE, 'r') as f:
-            BEARER_TOKEN = f.read().strip()
-    except Exception:
-        pass
 
 # ─── 数据库 ───────────────────────────────────────────
 def get_db():
@@ -146,310 +152,107 @@ def get_db_conn():
     conn.cursor_factory = psycopg2.extras.RealDictCursor
     return conn
 
-def ensure_observability_schema():
-    """确保流量、策略、IP定位和安全事件相关表存在。"""
-    statements = [
-        """
-        CREATE TABLE IF NOT EXISTS client_policies (
-            id SERIAL PRIMARY KEY,
-            scope TEXT NOT NULL,
-            group_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            group_name TEXT,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-            machine_name TEXT,
-            rate_up_mbps DOUBLE PRECISION,
-            rate_down_mbps DOUBLE PRECISION,
-            monthly_quota_gb DOUBLE PRECISION,
-            exceed_action TEXT DEFAULT 'throttle',
-            enabled BOOLEAN DEFAULT TRUE,
-            priority INTEGER DEFAULT 100,
-            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW(),
-            remark TEXT
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS client_policy_states (
-            id SERIAL PRIMARY KEY,
-            policy_id INTEGER REFERENCES client_policies(id) ON DELETE SET NULL,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-            machine_name TEXT,
-            applied BOOLEAN DEFAULT FALSE,
-            effective_policy JSONB,
-            error TEXT,
-            applied_at TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT NOW()
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS traffic_samples (
-            id SERIAL PRIMARY KEY,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-            machine_name TEXT,
-            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            group_name TEXT,
-            rx_bytes_total BIGINT DEFAULT 0,
-            tx_bytes_total BIGINT DEFAULT 0,
-            rx_bytes_delta BIGINT DEFAULT 0,
-            tx_bytes_delta BIGINT DEFAULT 0,
-            rx_rate_bps DOUBLE PRECISION DEFAULT 0,
-            tx_rate_bps DOUBLE PRECISION DEFAULT 0,
-            derp BOOLEAN DEFAULT FALSE,
-            endpoint_type TEXT,
-            observed_at TIMESTAMP DEFAULT NOW()
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS traffic_hourly (
-            id SERIAL PRIMARY KEY,
-            bucket_start TIMESTAMP NOT NULL,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            rx_bytes BIGINT DEFAULT 0,
-            tx_bytes BIGINT DEFAULT 0,
-            peak_rx_rate_bps DOUBLE PRECISION DEFAULT 0,
-            peak_tx_rate_bps DOUBLE PRECISION DEFAULT 0,
-            UNIQUE(bucket_start, machine_id)
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS traffic_daily (
-            id SERIAL PRIMARY KEY,
-            bucket_date DATE NOT NULL,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            rx_bytes BIGINT DEFAULT 0,
-            tx_bytes BIGINT DEFAULT 0,
-            UNIQUE(bucket_date, machine_id)
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS node_ip_observations (
-            id SERIAL PRIMARY KEY,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-            machine_name TEXT,
-            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            group_name TEXT,
-            ip TEXT NOT NULL,
-            country TEXT,
-            region TEXT,
-            city TEXT,
-            asn TEXT,
-            isp TEXT,
-            risk_flags JSONB,
-            first_seen TIMESTAMP DEFAULT NOW(),
-            last_seen TIMESTAMP DEFAULT NOW(),
-            seen_count INTEGER DEFAULT 1
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS flow_summaries (
-            id SERIAL PRIMARY KEY,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-            machine_name TEXT,
-            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            group_name TEXT,
-            window_start TIMESTAMP NOT NULL,
-            window_seconds INTEGER NOT NULL DEFAULT 60,
-            dst_ip TEXT,
-            dst_port INTEGER,
-            protocol TEXT,
-            direction TEXT,
-            bytes BIGINT DEFAULT 0,
-            packets BIGINT DEFAULT 0,
-            connection_count INTEGER DEFAULT 0,
-            state TEXT,
-            process_id INTEGER,
-            process_name TEXT
-        )
-        """,
-        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS machine_name TEXT",
-        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS group_name TEXT",
-        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS connection_count INTEGER DEFAULT 0",
-        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS state TEXT",
-        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS process_id INTEGER",
-        "ALTER TABLE flow_summaries ADD COLUMN IF NOT EXISTS process_name TEXT",
-        """
-        CREATE TABLE IF NOT EXISTS security_events (
-            id SERIAL PRIMARY KEY,
-            level TEXT NOT NULL DEFAULT 'info',
-            event_type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            group_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            group_name TEXT,
-            machine_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
-            machine_name TEXT,
-            ip TEXT,
-            country TEXT,
-            city TEXT,
-            asn TEXT,
-            evidence JSONB,
-            status TEXT NOT NULL DEFAULT 'open',
-            handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            handled_at TIMESTAMP,
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS trusted_networks (
-            id SERIAL PRIMARY KEY,
-            kind TEXT NOT NULL,
-            value TEXT NOT NULL,
-            description TEXT,
-            enabled BOOLEAN DEFAULT TRUE,
-            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS risk_rules (
-            id SERIAL PRIMARY KEY,
-            rule_key TEXT NOT NULL UNIQUE,
-            name TEXT NOT NULL,
-            level TEXT NOT NULL DEFAULT 'medium',
-            enabled BOOLEAN DEFAULT TRUE,
-            config JSONB,
-            updated_at TIMESTAMP DEFAULT NOW()
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS client_releases (
-            id SERIAL PRIMARY KEY,
-            version TEXT NOT NULL,
-            platform TEXT NOT NULL DEFAULT 'windows-amd64',
-            update_type TEXT NOT NULL DEFAULT 'suggested',
-            title TEXT,
-            description TEXT,
-            download_url TEXT,
-            sha256 TEXT,
-            signature TEXT,
-            file_size BIGINT,
-            release_notes TEXT,
-            enabled BOOLEAN DEFAULT TRUE,
-            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
-        )
-        """,
-        "ALTER TABLE client_releases ADD COLUMN IF NOT EXISTS sha256 TEXT",
-        "ALTER TABLE client_releases ADD COLUMN IF NOT EXISTS signature TEXT",
-        "ALTER TABLE client_releases ADD COLUMN IF NOT EXISTS file_size BIGINT",
-        "CREATE INDEX IF NOT EXISTS idx_client_policies_scope ON client_policies(scope)",
-        "CREATE INDEX IF NOT EXISTS idx_client_policies_group_id ON client_policies(group_id)",
-        "CREATE INDEX IF NOT EXISTS idx_client_policies_machine_id ON client_policies(machine_id)",
-        "CREATE INDEX IF NOT EXISTS idx_traffic_samples_machine_time ON traffic_samples(machine_id, observed_at)",
-        "CREATE INDEX IF NOT EXISTS idx_traffic_samples_group_time ON traffic_samples(group_id, observed_at)",
-        "CREATE INDEX IF NOT EXISTS idx_node_ip_observations_machine ON node_ip_observations(machine_id)",
-        "CREATE INDEX IF NOT EXISTS idx_flow_summaries_machine_window ON flow_summaries(machine_id, window_start)",
-        "CREATE INDEX IF NOT EXISTS idx_security_events_status ON security_events(status)",
-        "CREATE INDEX IF NOT EXISTS idx_security_events_level ON security_events(level)",
-        "CREATE INDEX IF NOT EXISTS idx_security_events_created_at ON security_events(created_at)",
-        "CREATE INDEX IF NOT EXISTS idx_trusted_networks_kind_value ON trusted_networks(kind, value)",
-        "CREATE INDEX IF NOT EXISTS idx_client_releases_enabled_platform ON client_releases(enabled, platform)",
-        "CREATE INDEX IF NOT EXISTS idx_client_releases_created_at ON client_releases(created_at)",
-    ]
-
-    try:
-        conn = get_db_conn()
-        try:
-            cur = conn.cursor()
-            for statement in statements:
-                cur.execute(statement)
-            conn.commit()
-        finally:
-            conn.close()
-    except Exception as exc:
-        print(f'观测与安全表初始化失败: {exc}')
-
 # ─── 日志记录 ─────────────────────────────────────────
 def record_log(conn, user_id: int, content: str):
-    """记录操作日志"""
-    try:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO log (user_id, content, created_at) VALUES (%s, %s, NOW())", (user_id, content))
-    except Exception as e:
-        print(f'记录日志失败: {e}')
-
-# ─── JWT 工具 ─────────────────────────────────────────
-def create_token(user_id: int, role: str) -> str:
-    """创建JWT令牌"""
-    expire = datetime.now(timezone.utc) + timedelta(seconds=JWT_EXPIRE_SECONDS)
-    payload = {
-        'sub': str(user_id),
-        'role': role,
-        'exp': expire,
-    }
-    return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
-
-def decode_token(token: str) -> dict:
-    """解码JWT令牌"""
-    try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except JWTError:
-        raise HTTPException(401, '登录已过期，请重新登录')
+    """记录平台账户操作日志；不再把账户 ID 写入网络分组外键。"""
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO log (account_id, content, created_at) VALUES (%s, %s, NOW())",
+        (user_id, content),
+    )
 
 # ─── 当前用户依赖 ─────────────────────────────────────
 class CurrentUser:
-    """当前用户模型"""
-    def __init__(self, id: int, name: str, role: str, email: str = '',
-                 cellphone: str = '', node: int = 0, route: int = 0,
-                 enable: int = 1, expire: str = '', created_at: str = ''):
-        self.id = id
-        self.name = name
-        self.role = role
-        self.email = email
-        self.cellphone = cellphone
-        self.node = node
-        self.route = route
-        self.enable = enable
-        self.expire = expire
-        self.created_at = created_at
+    """Headscale account session projected into ScaleForge."""
+
+    def __init__(self, account: dict[str, Any], token: str, must_change_password: bool):
+        self.id = int(account['id'])
+        self.name = str(account.get('username') or '')
+        self.username = self.name
+        self.role = str(account.get('role') or 'user')
+        self.enabled = bool(account.get('enabled', True))
+        self.enable = 1 if self.enabled else 0
+        self.expires_at = account.get('expiresAt')
+        self.expire = self.expires_at or ''
+        self.password_changed_at = account.get('passwordChangedAt')
+        self.must_change_password = bool(
+            must_change_password or account.get('mustChangePassword', False)
+        )
+        self.network_user_id = _optional_int(account.get('userId'))
+        self.network_name = str(account.get('networkName') or '')
+        self.session_token = token
+        self.raw_account = account
 
     def is_manager(self):
         """是否为管理员"""
         return self.role == 'manager'
 
 def get_current_user(request: Request) -> CurrentUser:
-    """获取当前登录用户"""
-    auth = request.headers.get('Authorization', '')
-    if auth.startswith('Bearer '):
-        token = auth[7:]
-    else:
-        token = request.cookies.get('token', '')
-        if not token:
-            raise HTTPException(401, '未登录')
-    
-    payload = decode_token(token)
-    user_id = payload.get('sub')
-    if not user_id:
-        raise HTTPException(401, '无效令牌')
-    
+    """只从安全 Cookie 读取 opaque token，并通过 UDS 验证会话。"""
+    token = request.cookies.get(SESSION_COOKIE_NAME, '')
+    if not token:
+        raise HTTPException(401, '未登录')
+
     try:
-        user_id = int(user_id)
-    except (ValueError, TypeError):
-        raise HTTPException(401, '无效令牌')
-    
-    conn = get_db_conn()
-    try:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
-            "SELECT id, name, role, email, cellphone, node, route, enable, "
-            "TO_CHAR(expire, 'YYYY-MM-DD HH24:MI:SS') as expire, "
-            "TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at "
-            "FROM users WHERE id=%s", 
-            (user_id,)
+        response = headscale_request('GET', '/v1/session', token=token)
+    except HeadscaleUnavailable as exc:
+        raise HTTPException(503, '认证服务暂不可用') from exc
+    if response.status_code != 200:
+        _, message = response_error(response)
+        raise HTTPException(401, message or '登录已过期，请重新登录')
+
+    payload = response.json()
+    account = payload.get('account') if isinstance(payload, dict) else None
+    if not isinstance(account, dict) or not account.get('id'):
+        raise HTTPException(502, '认证服务返回了无效账户信息')
+
+    current = CurrentUser(account, token, bool(payload.get('mustChangePassword')))
+    allowed_when_restricted = {
+        '/api/auth/me',
+        '/api/auth/password',
+        '/api/auth/logout',
+    }
+    if current.must_change_password and request.url.path not in allowed_when_restricted:
+        raise HTTPException(
+            403,
+            detail={
+                'code': 'password_change_required',
+                'message': '密码已过期，请先修改密码',
+            },
         )
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(401, '用户不存在')
-        return CurrentUser(**row)
-    finally:
-        conn.close()
+    return current
 
 def require_manager(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     """要求管理员权限"""
     if not user.is_manager():
         raise HTTPException(403, '需要管理员权限')
     return user
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ''):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def require_node_access(node_id: int | str, user: CurrentUser) -> None:
+    """Manager can access all nodes; users are confined to their network UserID."""
+    if user.is_manager():
+        return
+    if user.network_user_id is None:
+        raise HTTPException(403, '当前账户未绑定网络分组')
+
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute('SELECT user_id FROM nodes WHERE id=%s', (node_id,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(404, '节点不存在')
+    if _optional_int(row.get('user_id')) != user.network_user_id:
+        raise HTTPException(403, '无权操作该节点')

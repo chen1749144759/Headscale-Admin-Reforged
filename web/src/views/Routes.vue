@@ -14,7 +14,7 @@
         </div>
       </div>
 
-      <el-table :data="filteredRoutes" v-loading="loading" stripe highlight-current-row empty-text="暂无路由通告（机器端需执行 tailscale up --advertise-routes=...）">
+      <el-table :data="filteredRoutes" v-loading="loading" stripe highlight-current-row empty-text="暂无路由通告（机器登录后需执行 scaletail set --advertise-routes=...）">
         <el-table-column label="机器" min-width="140">
           <template #default="{ row }">
             <span style="font-weight:600">{{ row.nodeName }}</span>

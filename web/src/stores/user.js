@@ -1,56 +1,79 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { getMe, getSystemStatus, getPublicStatus } from '@/api'
+import { getMe, getPublicStatus, getSystemStatus, logout as logoutRequest } from '@/api'
 import router from '@/router'
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref(localStorage.getItem('hs_token') || '')
   const userInfo = ref({})
+  const authenticated = ref(false)
+  const sessionChecked = ref(false)
   const systemStatus = ref({
     headscale_running: false,
     headscale_healthy: false,
     headscale_version: '',
-    open_user_reg: 'off',
   })
 
-  const isLoggedIn = computed(() => !!token.value)
+  const isLoggedIn = computed(() => authenticated.value)
   const isManager = computed(() => userInfo.value.role === 'manager')
-  const openReg = computed(() => systemStatus.value.open_user_reg === 'on')
+  const mustChangePassword = computed(() => Boolean(userInfo.value.mustChangePassword))
 
-  function setToken(t) {
-    token.value = t
-    if (t) {
-      localStorage.setItem('hs_token', t)
-    } else {
-      localStorage.removeItem('hs_token')
-    }
+  function acceptSession(user) {
+    userInfo.value = user || {}
+    authenticated.value = Boolean(user?.id)
+    sessionChecked.value = true
+  }
+
+  function clearSession() {
+    userInfo.value = {}
+    authenticated.value = false
+    sessionChecked.value = true
   }
 
   async function fetchUserInfo() {
     try {
       const res = await getMe()
-      userInfo.value = res.data
+      acceptSession(res.data)
+      return true
     } catch {
-      logout()
+      clearSession()
+      return false
     }
+  }
+
+  async function ensureSession() {
+    if (!sessionChecked.value) return fetchUserInfo()
+    return authenticated.value
   }
 
   async function fetchSystemStatus() {
     try {
-      const res = token.value ? await getSystemStatus() : await getPublicStatus()
-      systemStatus.value = res.data
+      const res = authenticated.value ? await getSystemStatus() : await getPublicStatus()
+      systemStatus.value = res.data || systemStatus.value
     } catch {}
   }
 
-  function logout() {
-    setToken('')
-    userInfo.value = {}
-    router.push('/login')
+  async function logout() {
+    // Only clear local state after Headscale confirms that the opaque session
+    // was revoked. Otherwise the UI would claim logout while the HttpOnly
+    // cookie remains valid on the server.
+    await logoutRequest()
+    clearSession()
+    await router.replace('/login')
   }
 
   return {
-    token, userInfo, systemStatus,
-    isLoggedIn, isManager, openReg,
-    setToken, fetchUserInfo, fetchSystemStatus, logout,
+    userInfo,
+    authenticated,
+    sessionChecked,
+    systemStatus,
+    isLoggedIn,
+    isManager,
+    mustChangePassword,
+    acceptSession,
+    clearSession,
+    fetchUserInfo,
+    ensureSession,
+    fetchSystemStatus,
+    logout,
   }
 })

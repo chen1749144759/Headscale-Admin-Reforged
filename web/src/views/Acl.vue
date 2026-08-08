@@ -22,10 +22,9 @@
         <details class="tip-collapse">
           <summary class="tip-summary">ACL 概念说明（点击展开）</summary>
           <div class="tip-body">
-            <p><b>ACL 规则页面</b>由三部分组成：<b>访问规则</b>、<b>分组定义</b>、<b>标签拥有者</b>。它们共同构成 Headscale 的访问控制策略。</p>
-            <p><b>访问规则 (acls)</b>：定义「谁」可以访问「谁」的「哪些端口」。来源和目标可以是分组名、分组定义名（group:xxx）、标签（tag:xxx）、IP 地址等。</p>
+            <p><b>ACL 规则页面</b>由两部分组成：<b>访问规则</b>和<b>分组定义</b>。它们共同构成 Headscale 的访问控制策略。</p>
+            <p><b>访问规则 (acls)</b>：定义「谁」可以访问「谁」的「哪些端口」。来源和目标可以是账户名、分组定义名（group:xxx）、IP 地址或 autogroup。</p>
             <p><b>分组定义 (groups)</b> 与 <b>分组管理页面</b> 的区别：分组管理页面管理的是 Headscale 的 <em>用户命名空间</em>（机器归属），而此处的分组定义是 ACL 策略层面的逻辑聚合 — 可以将多个用户命名空间归到一个 group:xxx 下，在访问规则中统一引用。例如 <code>group:devs = ["dev1", "dev2"]</code>，之后规则中写 <code>group:devs</code> 即代表 dev1 和 dev2 下的所有机器。你可以在「分组管理」页面快速管理分组定义。</p>
-            <p><b>标签拥有者 (tagOwners)</b>：定义哪些分组可以为自己的机器打上特定标签。例如 <code>tag:server</code> 的拥有者设为 <code>group:ops</code>，那么 ops 组内的机器可以打 <code>tag:server</code> 标签。打了标签的机器可以在访问规则中作为来源或目标使用。你可以在「用户管理」页面直接为机器设置标签。</p>
           </div>
         </details>
 
@@ -96,34 +95,6 @@
           </el-table>
         </div>
 
-        <!-- TagOwners -->
-        <div class="visual-section">
-          <div class="visual-section-header">
-            <span class="visual-section-title">标签拥有者 (tagOwners)</span>
-            <el-button type="primary" size="small" @click="addTagOwner">添加标签</el-button>
-          </div>
-          <el-table :data="visualTagOwners" size="small" border empty-text="暂无标签">
-            <el-table-column label="标签名称" width="180">
-              <template #default="{ row }">
-                <code style="font-size:13px">{{ row.tag }}</code>
-              </template>
-            </el-table-column>
-            <el-table-column label="拥有者" min-width="300">
-              <template #default="{ row, $index }">
-                <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
-                  <el-tag v-for="(o, oi) in row.owners" :key="oi" size="small" closable
-                    @close="row.owners.splice(oi, 1)">{{ o }}</el-tag>
-                  <el-button size="small" link @click="addTagOwnerMember($index)">+</el-button>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="80">
-              <template #default="{ $index }">
-                <el-button type="danger" link size="small" @click="visualTagOwners.splice($index, 1)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
       </div>
 
       <!-- 源码编辑模式 -->
@@ -146,8 +117,7 @@
       </div>
 
       <div class="acl-footer">
-        <el-text type="info" size="small">提示：保存后若 headscale 使用 database 模式会自动生效；若使用 file 模式则需要点击"重载"。</el-text>
-        <el-button type="warning" size="small" @click="handleReload">重载 Headscale</el-button>
+        <el-text type="info" size="small">保存后策略会通过 Headscale 数据库策略接口立即生效。</el-text>
       </div>
     </div>
 
@@ -164,8 +134,8 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import { getAcl, updateAcl, reloadHeadscale } from '@/api'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { getAcl, updateAcl } from '@/api'
+import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 
 const activeTab = ref('visual')
@@ -177,7 +147,6 @@ const lineNumRef = ref(null)
 // ─── 可视化数据 ───
 const visualAcls = ref([])
 const visualGroups = ref([])
-const visualTagOwners = ref([])
 
 // ─── 通用输入弹窗 ───
 const inputVisible = ref(false)
@@ -266,18 +235,9 @@ function parseAclToVisual(raw) {
     }
     visualGroups.value = groups
 
-    // tagOwners
-    const tags = []
-    if (obj.tagOwners) {
-      for (const [tag, owners] of Object.entries(obj.tagOwners)) {
-        tags.push({ tag, owners: Array.isArray(owners) ? [...owners] : [] })
-      }
-    }
-    visualTagOwners.value = tags
   } catch {
     visualAcls.value = []
     visualGroups.value = []
-    visualTagOwners.value = []
   }
 }
 
@@ -307,12 +267,7 @@ function visualToAclJson() {
     }
   }
 
-  if (visualTagOwners.value.length > 0) {
-    existing.tagOwners = {}
-    for (const t of visualTagOwners.value) {
-      existing.tagOwners[t.tag] = t.owners
-    }
-  }
+  delete existing.tagOwners
 
   return JSON.stringify(existing, null, 2)
 }
@@ -351,23 +306,6 @@ function addGroupMember(groupIdx) {
   })
 }
 
-// ─── TagOwners 操作 ───
-function addTagOwner() {
-  showInput('添加标签', 'tag:tagName', (val) => {
-    const tag = val.startsWith('tag:') ? val : `tag:${val}`
-    if (visualTagOwners.value.find(t => t.tag === tag)) {
-      return ElMessage.warning('标签已存在')
-    }
-    visualTagOwners.value.push({ tag, owners: [] })
-  })
-}
-
-function addTagOwnerMember(tagIdx) {
-  showInput('添加拥有者', '分组名或 group:xxx', (val) => {
-    visualTagOwners.value[tagIdx].owners.push(val)
-  })
-}
-
 // ─── 切换 tab 时同步数据 ───
 watch(activeTab, (newTab, oldTab) => {
   if (oldTab === 'visual' && newTab === 'raw') {
@@ -402,14 +340,6 @@ async function handleSave() {
     ElMessage.success('ACL 已保存')
   } catch {}
   saving.value = false
-}
-
-async function handleReload() {
-  try {
-    await ElMessageBox.confirm('确认重载 Headscale 服务？重载后新 ACL 规则立即生效。', '重载确认', { type: 'warning' })
-    await reloadHeadscale()
-    ElMessage.success('Headscale 重载成功')
-  } catch {}
 }
 
 onMounted(loadAcl)

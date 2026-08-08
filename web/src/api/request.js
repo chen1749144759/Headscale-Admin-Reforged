@@ -5,35 +5,43 @@ import router from '@/router'
 const request = axios.create({
   baseURL: '/api',
   timeout: 15000,
+  withCredentials: true,
+  headers: { Accept: 'application/json' },
 })
 
-// 请求拦截器 - 附加 Token
-request.interceptors.request.use((config) => {
-  const token = localStorage.getItem('hs_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+function errorDetail(error) {
+  const detail = error.response?.data?.detail
+  if (detail && typeof detail === 'object') {
+    return {
+      code: detail.code || '',
+      message: detail.message || detail.error || '请求失败',
+    }
   }
-  return config
-})
+  return {
+    code: error.response?.data?.code || '',
+    message: detail || error.response?.data?.msg || '请求失败',
+  }
+}
 
-// 响应拦截器 - 统一错误处理
 request.interceptors.response.use(
-  (response) => {
-    return response.data
-  },
-  (error) => {
+  (response) => response.data,
+  async (error) => {
     const status = error.response?.status
-    const msg = error.response?.data?.detail || error.response?.data?.msg || '请求失败'
+    const { code, message } = errorDetail(error)
 
     if (status === 401) {
-      localStorage.removeItem('hs_token')
-      router.push('/login')
-      ElMessage.error('登录已过期，请重新登录')
+      const { useUserStore } = await import('@/stores/user')
+      useUserStore().clearSession()
+      if (router.currentRoute.value.name !== 'Login') await router.replace('/login')
+      if (error.config?.url !== '/auth/me') ElMessage.error('登录已过期，请重新登录')
+    } else if (status === 403 && code === 'password_change_required') {
+      if (router.currentRoute.value.name !== 'Password') router.replace('/password')
+      ElMessage.warning(message)
     } else {
-      ElMessage.error(msg)
+      ElMessage.error(message)
     }
-    return Promise.reject(error)
-  }
+    throw error
+  },
 )
 
 export default request

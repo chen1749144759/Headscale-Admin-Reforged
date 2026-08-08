@@ -1,7 +1,7 @@
 <template>
   <div>
-    <div class="page-header"><h2>个人资料</h2><p>查看和修改您的个人信息</p></div>
-    <div class="glass-card content-card" style="max-width:600px">
+    <div class="page-header"><h2>账户信息</h2><p>账户身份由 Headscale 统一管理</p></div>
+    <div class="glass-card content-card" style="max-width:680px">
       <div style="display:flex;align-items:center;gap:20px;margin-bottom:24px">
         <el-avatar :size="64" style="background:var(--v3s-primary);font-size:26px">
           {{ userStore.userInfo?.name?.[0]?.toUpperCase() || 'U' }}
@@ -9,47 +9,33 @@
         <div>
           <div style="font-size:18px;font-weight:700">{{ userStore.userInfo?.name }}</div>
           <el-tag :type="userStore.isManager ? 'danger' : 'info'" size="small" style="margin-top:4px">
-            {{ userStore.isManager ? '管理员' : '用户' }}
+            {{ userStore.isManager ? '管理员' : '普通账户' }}
           </el-tag>
         </div>
       </div>
-      <el-form :model="form" label-width="80px">
-        <el-form-item label="邮箱">
-          <el-input v-model="form.email" placeholder="输入邮箱" />
-        </el-form-item>
-        <el-form-item label="手机号">
-          <el-input v-model="form.cellphone" placeholder="输入手机号" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
-        </el-form-item>
-      </el-form>
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="网络分组">
+          {{ userStore.userInfo?.networkName || '未绑定' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="账户到期">
+          {{ formatTime(userStore.userInfo?.expiresAt) || '永不过期' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="密码更新时间">
+          {{ formatTime(userStore.userInfo?.passwordChangedAt) || '-' }}
+        </el-descriptions-item>
+      </el-descriptions>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
-import { updateProfile } from '@/api'
-import { ElMessage } from 'element-plus'
 
 const userStore = useUserStore()
-const saving = ref(false)
-const form = reactive({ email: '', cellphone: '' })
 
-onMounted(() => {
-  form.email = userStore.userInfo?.email || ''
-  form.cellphone = userStore.userInfo?.cellphone || ''
-})
-
-async function handleSave() {
-  saving.value = true
-  try {
-    await updateProfile(form)
-    ElMessage.success('保存成功')
-    await userStore.fetchUserInfo()
-  } catch {}
-  saving.value = false
+function formatTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
 }
 </script>

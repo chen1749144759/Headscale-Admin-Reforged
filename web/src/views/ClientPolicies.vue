@@ -57,7 +57,12 @@
       <div class="section-title">客户端应用状态</div>
       <el-table :data="states" size="small" stripe>
         <el-table-column prop="machine_name" label="机器" min-width="140" />
-        <el-table-column prop="policy_id" label="策略ID" width="90" />
+        <el-table-column label="命中策略" min-width="120">
+          <template #default="{ row }">{{ (row.matched_policy_ids || []).join(', ') || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="策略版本" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.policy_revision || '-' }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="row.applied ? 'success' : 'warning'" effect="plain">{{ row.applied ? '已应用' : '待应用' }}</el-tag>

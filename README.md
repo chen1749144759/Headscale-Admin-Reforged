@@ -3,259 +3,279 @@
 [![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
-[![Element Plus](https://img.shields.io/badge/Element%20Plus-2.x-409EFF)](https://element-plus.org/)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](#部署难度)
-[![Headscale](https://img.shields.io/badge/Headscale--Admin--AE-v0.28.0%20%2B%20v0.29.2%20fixes-326CE5)](https://github.com/chen1749144759/Headscale-Admin-AE)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](#部署)
 
-ScaleForge 是面向自建 Headscale/ScaleTail 网络的 Web 管理平台。它提供图形化的用户、节点、路由、ACL、预认证密钥、流量统计、客户端策略和安全审计能力，推荐与 `Headscale-Admin-AE` 和 `ScaleTail` 一起部署。
+ScaleForge 是自建 ScaleTail 网络的管理平台，提供账户与网络分组、节点、路由、ACL、DNS、流量、安全审计、客户端策略和签名 OTA 版本管理。它与 [Headscale-Admin-AE](https://github.com/chen1749144759/Headscale-Admin-AE) 和 [ScaleTail](https://github.com/chen1749144759/ScaleTail) 配套使用。
 
-仓库地址：[chen1749144759/ScaleForge](https://github.com/chen1749144759/ScaleForge)
+当前分支采用单一账户密码体系：用户不再创建或复制预认证密钥，客户端也不再进入浏览器注册流程。Headscale `users` 仅表示网络分组，登录身份由 Headscale `accounts` 统一管理。
 
-## 最近更新
+## 项目定位
 
-### 2026-07 客户端签名 OTA
-
-- 客户端版本发布新增 SHA-256、安装包大小和 Ed25519 签名元数据，旧数据库会在启动时自动增量补列。
-- 版本发布页可直接导入 ScaleTail 构建生成的 `.ota.json`，减少手工录入错误。
-- ScaleTail Windows 客户端可后台下载并静默覆盖安装；强制更新与建议更新继续使用原有发布策略。
-- 下载地址只负责传输，安装权限由客户端内置公钥和 `scaletaild` 二次验签控制。
-
-### 2026-07-27 配套发布
-
-- ScaleTail `v0.0.7` 增加签名 OTA 引导和 TUN 双向总带宽整形，ScaleForge 继续负责建议更新、强制更新、策略下发和状态回传。
-- 本次 Docker Hub 固定镜像为 `chenzeshi/scaleforge-backend:20260727-577ff10`、`chenzeshi/scaleforge-nginx:20260727-577ff10`。
-- 配套控制端镜像为 `chenzeshi/headscale-admin-ae:20260727-387705f`，同时更新三个镜像的 `latest` 标签。
-- 生产环境推荐固定版本标签；`latest` 适合首次体验，不适合作为无法追溯的长期生产版本。
-
-### 2026-06-24 管理端视觉与流量统计更新
-
-- 重设计登录页，保留原有账号、验证码、初始化入口逻辑，统一为 ScaleForge 私有网络控制台风格。
-- 重设计流量统计页，改为玻璃化数据面板，突出全局流量、机器排行、分组排行、请求分析和采样频率。
-- 目标地址排行只展示 TOP20，并由后端过滤为 ScaleTail Tailnet IP 或已批准/已宣告路由目标，避免混入普通本地流量。
-- 最近连接明细按用户/机器分组展示，再细化到目标地址、进程、时间和连接次数。
-- 最近采样改为每台机器的 24 小时/12 小时采样频率，按客户端默认 15 秒上报间隔估算正常与缺失。
-- 新增 `/api/traffic/sample-health` 接口，供前端展示机器采样健康度。
-- 本次部署需要同步更新 `scaleforge-backend` 和 `scaleforge-nginx`，因为新版前端依赖新增后端接口。
-
-## 版本定位
-
-| 项目项 | 当前说明 |
+| 项目 | 责任边界 |
 |---|---|
-| 裂变来源 | 基于 `arounyf/Headscale-Admin-Pro v4.0.0` 的产品思路和管理能力重写 |
-| 架构变化 | 从 Flask/Jinja 单体管理面板重构为 FastAPI + Vue 3 前后端分离架构 |
-| 当前对标 | 配套 `Headscale-Admin-AE`，其基础为官方 headscale `v0.28.0`，并已回补官方 headscale `v0.29.2` 关键修复 |
-| 客户端对标 | 配套 `ScaleTail`，客户端核心按 Tailscale `v1.98.9` 关键修复审计 |
-| 默认数据库 | PostgreSQL 16，开发环境可使用 SQLite |
-| 默认部署 | Docker Compose |
+| ScaleForge | Web 管理、账户管理、DNS、策略、流量、安全审计和 OTA 发布 |
+| Headscale-Admin-AE | 账户认证、控制协议、节点注册、网络地图、路由和内嵌 DERP |
+| ScaleTail | Windows/Linux 客户端、LocalAPI、TUN 数据面、状态上报和 OTA 执行 |
 
-ScaleForge 本身不是 headscale 控制面进程，它是管理平台。真正处理节点注册、网络地图、控制协议的是 `Headscale-Admin-AE`；ScaleForge 通过共享数据库和 API 完成可视化管理。
+ScaleForge 不是控制面代理，也不保存能代替用户登录的长期 Headscale API Key。控制协议和设备身份始终由 Headscale-Admin-AE 处理。
 
-## 自实现功能
+## 架构与信任边界
 
-- FastAPI 后端，提供 JWT 登录、用户资料、系统状态、节点、路由、ACL、预认证密钥、日志和部署状态 API。
-- Vue 3 + Vite + Element Plus 前端，提供现代化管理后台界面。
-- 支持 Cap 挑战验证码登录流程，后端登录接口执行二次校验。
-- 用户/分组管理：管理 Headscale 用户命名空间、账户状态、过期时间、节点配额、路由权限。
-- 节点管理：列表、搜索、重命名、删除、过期、移动分组、标签管理。
-- 路由管理：查看、批准、撤销子网路由和出口节点相关路由。
-- ACL 管理：在线读取、编辑、保存和重载 ACL/HuJSON 策略。
-- 预认证密钥管理：创建、删除、复制，支持过期时间、可复用、临时节点等选项。
-- 操作日志：记录平台侧关键管理操作。
-- 流量统计：按全局、分组、机器展示收发流量、峰值速率和采样记录。
-- 请求分析：接收 ScaleTail 客户端上报的连接摘要，统计目标 IP、端口、进程和连接次数。
-- 客户端策略：配置全局、分组、机器三层上传限速、下载限速字段、月流量配额、超额动作。
-- 客户端版本发布：发布建议更新/强制更新策略，管理 SHA-256、Ed25519 签名和包大小，支持 Windows 客户端签名 OTA 静默覆盖安装。
-- 安全审计：安全事件、IP 观测历史、可信网络、风险规则管理。
-- IP 定位：支持可选外部 IP 地理信息接口；未配置时不会影响上报，只是不补充地理字段。
-- 客户端上报接口：使用 `SCALETAIL_CLIENT_TOKEN` 或 `config.yaml: client_report_token` 作为共享密钥。
+```text
+浏览器 --HTTPS--> Nginx
+                    |
+                    +-- /var/run/scaleforge/public/api.sock
+                            |
+                            v
+                    ScaleForge Public API
+                            |
+                    /var/run/scaleforge/control/api.sock
+                            |
+                            v
+                    Headscale-Admin-AE
 
-## 新增数据表
+ScaleTail --Noise 控制连接--> Headscale-Admin-AE
+                                  |
+                         已验证节点身份后转发
+                                  |
+                    /var/run/scaleforge/client/api.sock
+                                  |
+                                  v
+                       ScaleForge Client API
+```
 
-| 表名 | 用途 |
-|---|---|
-| `client_policies` | 全局、分组、机器维度客户端策略 |
-| `client_policy_states` | 客户端策略应用状态回传 |
-| `traffic_samples` | 原始流量采样 |
-| `traffic_hourly` | 小时级聚合流量 |
-| `traffic_daily` | 日级聚合流量 |
-| `flow_summaries` | 客户端请求/连接摘要 |
-| `node_ip_observations` | 节点公网 IP 观测和定位历史 |
-| `security_events` | 安全事件 |
-| `trusted_networks` | 可信 IP/CIDR/ASN/国家规则 |
-| `risk_rules` | 安全风险规则配置 |
-| `client_releases` | ScaleTail 客户端版本、强制/建议更新及 OTA 完整性元数据 |
+- Nginx 只挂载 Web API UDS，不接触 Headscale 管理 Socket 或客户端上报 Socket。
+- ScaleForge Public API 只读挂载 Headscale 管理 UDS，通过相对路径调用私有接口，不使用 TCP 管理端口。
+- Client API 不暴露给浏览器或公网。Headscale 完成 Noise 和节点身份校验后，才通过独立 UDS 转发上报、策略和版本请求。
+- Headscale 与两个 ScaleForge API 的双向 UDS 请求还必须通过共享 HMAC 密钥校验；签名绑定方法、路径、查询、正文摘要、时间戳、随机 nonce、授权头和节点/用户上下文，并拒绝超时与重放。
+- 浏览器只持有 Headscale 生成的 opaque session Cookie；Cookie 使用 `Secure`、`HttpOnly`、`SameSite=Strict`。
+- Headscale 与 ScaleForge 使用不同 PostgreSQL 运行角色；高权限数据库账户只用于 bootstrap 和迁移。
+- 默认使用 Headscale 内嵌 DERP 并校验已注册客户端，不需要额外部署第三方 derper。
 
-这些表也会在 `Headscale-Admin-AE` 启动时同步创建，避免服务端和管理平台字段不一致。
+这些 Socket 只能通过 Compose 私有 volume 共享，不应映射为 TCP 端口，也不应挂载给无关容器。
 
-## 部署难度
+## 账户密码
 
-| 场景 | 难度 | 说明 |
-|---|---:|---|
-| Docker Compose 一键部署 | 中 | 推荐方式。一次启动 PostgreSQL、Headscale-Admin-AE、ScaleForge 后端、Nginx 前端等组件。 |
-| 只部署 ScaleForge 管理平台 | 中 | 适合已有 Headscale-Admin-AE 和数据库的场景，需要正确配置 API、数据库和 token。 |
-| 源码开发运行 | 中高 | 需要 Python 3.13、Node.js、PostgreSQL、前后端分别启动。 |
-| 从官方 headscale 迁移 | 高 | 需要确认数据库结构、配置文件、ACL、DERP、预认证密钥和客户端登录状态。 |
+- 管理员通过账户页面创建账户，并将普通账户一对一绑定到网络分组。
+- 普通账户只能查看和管理其分组内的节点与路由；管理员可查看全局数据。
+- 初始管理员只在数据库尚无账户时，由 Docker secret `scaleforge_bootstrap_password` 创建；没有公开注册入口。
+- 管理员重置密码后，账户必须在下次登录时修改初始密码。
+- 修改密码不能复用当前密码和最近四个历史密码；更新会撤销旧管理会话，并要求节点在新的控制会话中重新完成账户证明。
+- 密码自最后修改起 90 天有效。到期后 Web 会话只允许修改密码或退出，客户端新会话、上报与策略领取也会被拒绝，直至密码更新。
+- ScaleTail Linux 交互登录使用 `--username` 并在终端内隐藏读取密码；自动化使用权限为 `0600` 的 `--password-file`。密码不能放进命令行、环境变量、镜像层或 Git。
+- ScaleTail 在新的控制会话内向 Headscale 证明账户密码；设备密钥只负责协议加密和节点身份，不形成第二套用户可维护的认证体系。
 
-部署成败最关键的几项配置：
+示例：
 
-- 数据库连接必须和 Headscale-Admin-AE 使用同一套库。
-- `SCALETAIL_CLIENT_TOKEN` 要和 ScaleTail 客户端页面里的上报密钥一致。
-- 如启用验证码，需部署并配置 Cap 服务，`CAPTCHA_API_ENDPOINT`、`CAPTCHA_SITEVERIFY_URL` 和 `CAPTCHA_SECRET_KEY` 必须对应同一个 Cap 站点。
-- 如果开启 IP 定位，需要配置 `IP_GEOLOOKUP_URL`，例如支持 `{ip}` 占位符的查询接口。
-- Nginx 需要正确反代 `/api/*` 到 FastAPI，必要时反代 `/hs/*` 到 Headscale-Admin-AE。
+```bash
+# 交互式登录，随后隐藏提示输入密码
+sudo scaletail login --login-server https://headscale.example.com --username alice
 
-## 验证码服务
+# 自动化登录：密码文件只包含一行密码
+sudo install -m 600 /dev/null /etc/scaletail/account-password
+sudoedit /etc/scaletail/account-password
+sudo scaletail login --login-server https://headscale.example.com \
+  --username alice \
+  --password-file /etc/scaletail/account-password
 
-ScaleForge 登录页使用的是 [Cap CAPTCHA](https://trycap.dev/guide/)：
+# 登录成功后再配置路由，不重复执行登录流程
+sudo scaletail set --advertise-routes=192.168.1.0/24 --accept-routes=true
+```
 
-- Cap 是开源、自托管的 CAPTCHA 服务，核心由浏览器端 `cap-widget` 和服务端挑战/校验 API 组成。
-- 官方推荐使用 Cap Standalone Docker 容器部署，并在控制台创建 site key 和 secret key。
-- 前端加载地址由 `CAPTCHA_WIDGET_SRC` 控制，默认是 `https://cdn.jsdelivr.net/npm/cap-widget`。
-- 挑战接口由 `CAPTCHA_API_ENDPOINT` 控制，通常形如 `http://CAP_SERVER:3000/<site-key>/`。
-- 后端二次校验使用 `CAPTCHA_SITEVERIFY_URL` 和 `CAPTCHA_SECRET_KEY`；secret 只写入真实部署 `.env`，不要提交到 Git。
-- 官方文档：[Cap Quickstart](https://trycap.dev/guide/)，源码仓库：[tiagozip/cap](https://github.com/tiagozip/cap)。
+## 功能
 
-## Docker Compose 首次部署
+- 账户、网络分组、节点、路由与 ACL 管理。
+- MagicDNS、全局 DNS、搜索域和覆盖本地 DNS 策略下发。
+- 全局、分组和机器维度的流量统计、目标地址 TOP20、采样健康度与连接摘要。
+- IP 观测、可信网络、风险规则、安全事件和管理操作审计。
+- 全局、分组和机器三层客户端策略，按最小有效限额合并。
+- Windows/Linux 客户端建议更新和强制更新发布。
+- 客户端状态、流量、策略执行结果和版本检查通过经过 Headscale 验证的私有通道完成。
 
-1. 准备安装了 Docker Engine、Compose v2 和 Git 的 Linux 主机。
-2. 克隆仓库并创建部署配置：
+上传和下载限速均在 ScaleTail TUN 数据路径按整台机器聚合执行，只影响经过 ScaleTail 覆盖网络的流量。策略可热更新，不按进程或单连接分别限额；物理局域网直连和普通公网流量不在统计与限速范围内。
+
+## DNS
+
+管理入口为“系统设置 -> DNS 配置”。平台通过 Headscale 私有 UDS 读取并热更新：
+
+- MagicDNS
+- 是否覆盖本地 DNS
+- 全局上游 DNS
+- 搜索域
+
+`HEADSCALE_DNS_DOMAIN` 是启动期基础域配置；其余 `.env` DNS 值用于首次渲染。之后应在 ScaleForge 页面管理，客户端还需要在 ScaleTail 中显式选择“采用服务端 DNS”。
+
+## CAPTCHA
+
+登录验证码使用自托管 [Cap](https://capjs.js.org/)。浏览器组件由前端依赖 `@cap.js/widget` 打包，不依赖运行时 CDN。
+
+- `CAPTCHA_API_ENDPOINT`：浏览器 challenge 地址，必须包含正确 site key。
+- `CAPTCHA_SITEVERIFY_URL`：后端校验地址。
+- `CAPTCHA_SECRET_KEY`：对应站点 secret，只能存在于部署环境。
+- challenge、siteverify 和 secret 必须属于同一个 Cap 站点。
+- 生产地址必须使用 HTTPS；仅本机回环开发允许 HTTP。
+
+暂不启用时可设置 `CAPTCHA_ENABLED=false`。公网管理端不建议关闭验证码。
+
+## OTA 签名
+
+ScaleForge 发布页保存单调递增的策略 revision、版本、平台、建议/强制/撤销动作、HTTPS 下载地址、文件大小、SHA-256 和 Ed25519 签名。签名覆盖以下规范化 v3 消息：
+
+```text
+scaletail-update-v3
+<policy_revision>
+<suggested|forced|clear>
+<version>
+<platform>
+<sha256>
+<file_size>
+<canonical_download_url>
+```
+
+- `signature` 格式固定为 `v3.<Ed25519 Base64>`；v1/v2 签名一律拒绝。
+- 发布策略只追加、不原地改写；客户端和 daemon 持久化最高 revision，拒绝旧策略重放和相同 revision 的内容替换。
+- `clear` 是签名撤销记录，不携带安装包元数据；用于解除强制策略并按升级前状态恢复网络。
+- 下载地址只接受无凭据、无片段的 HTTPS DNS 主机名，拒绝 `localhost`、回环/私网/链路本地 IP literal 及所有 IP literal。客户端会在下载前验签，并在每个重定向节点重复执行该校验。
+- 客户端当前不预解析下载域名来拦截私网 DNS 结果；受信任下载域必须由发布运维控制，DNS 重绑定或恶意 DNS 指向私网是该层的残余风险。
+- 私钥只存在于受控发布环境，不能放入 ScaleForge、客户端或仓库。
+- ScaleForge 在保存和下发前使用内置公钥验签；无效或旧的未签名发布不会下发给客户端。
+- ScaleTail 下载后再次核对 HTTPS 地址、大小、SHA-256 和 Ed25519 签名，再执行覆盖安装。
+- 强制更新会阻止继续使用旧客户端；建议更新允许用户延后处理。
+
+## 数据库迁移
+
+Compose 启动顺序为 PostgreSQL -> 数据库角色 bootstrap -> Headscale -> `scaleforge-migrate` -> 两个 ScaleForge API -> Nginx。
+
+- `migrations/*.sql` 按文件名排序执行。
+- 已执行版本及 SHA-256 存在 `scaleforge_schema_migrations`。
+- 已执行迁移不可修改；校验和变化会让启动失败，修复必须新增下一号迁移。
+- `001_platform_schema.sql` 创建并接管平台表，将旧 `user_id/created_by` 所有权字段迁移到账户字段。
+- `002_normalize_platform_defaults.sql` 回填旧流量摘要和 OTA 行的新增字段，并统一默认值与 `NOT NULL` 约束。
+- `003_drop_legacy_platform_foreign_keys.sql` 移除平台表对旧 Headscale 用户语义的外键依赖。
+- `004_client_release_policy_v3.sql` 将旧发布记录迁入追加式 OTA v3 策略表；无法形成有效签名策略的旧记录只保留审计信息。
+- 老版本未签名 OTA 行会保留用于审计，但在补齐有效元数据和签名前不会下发。
+- 升级不删除 PostgreSQL 数据卷，不需要重建数据库。
+
+迁移使用数据库管理员账户，运行期 Headscale 和 ScaleForge 角色只获得各自所需权限。
+
+## 部署
+
+推荐使用 Linux、Docker Engine 和 Docker Compose v2。生产环境必须为管理站点和 Headscale 控制地址配置可信 HTTPS 反向代理。
+
+1. 准备配置和初始管理员密码：
 
 ```bash
 git clone https://github.com/chen1749144759/ScaleForge.git
 cd ScaleForge/docker
 cp .env.example .env
+cp secrets/scaleforge_bootstrap_password.example secrets/scaleforge_bootstrap_password
+openssl rand -hex 32 > secrets/scaleforge_internal_auth_key
+chmod 600 .env secrets/scaleforge_bootstrap_password secrets/scaleforge_internal_auth_key
 ```
 
-3. 编辑 `.env`，至少修改下面这些值：
+2. 编辑 `.env`，至少替换：
 
-```dotenv
-HEADSCALE_SERVER_URL=https://vpn.example.com
-HS_PORT=8080
-WEB_PORT=80
+- `HEADSCALE_SERVER_URL`：客户端可达的可信 HTTPS 控制地址。
+- `TRUSTED_ORIGINS`：管理端完整 HTTPS origin；多个值用英文逗号分隔。
+- `HEADSCALE_TRUSTED_PROXY_CIDRS`：仅填写真实反向代理所在的最小 CIDR；不在列表内的来源不能提供客户端 IP 头。
+- `DERP_DOMAIN`：内嵌 DERP 使用的域名。
+- `POSTGRES_PASSWORD`、`HEADSCALE_DB_PASSWORD`、`SCALEFORGE_DB_PASSWORD`：三个不同的随机强密码。
+- `CAPTCHA_API_ENDPOINT`、`CAPTCHA_SITEVERIFY_URL`、`CAPTCHA_SECRET_KEY`：启用 Cap 时必填。
+- `AE_VERSION`、`BACKEND_VERSION`、`NGINX_VERSION`：生产环境应固定到明确镜像标签，不长期使用 `latest`。
 
-AE_VERSION=20260727-387705f
-BACKEND_VERSION=20260727-577ff10
-NGINX_VERSION=20260727-577ff10
+将初始管理员密码写入 `secrets/scaleforge_bootstrap_password`。`scaleforge_internal_auth_key` 必须是至少 32 字节的独立随机值，两个 secret 都不能写入 README、`.env.example`、Compose、镜像或命令历史。
 
-POSTGRES_PASSWORD=请替换为随机强密码
-SECRET_KEY=请替换为随机强密钥
-SCALETAIL_CLIENT_TOKEN=请替换为独立随机Token
-```
-
-可以使用 `openssl rand -hex 32` 分别生成 `SECRET_KEY` 和 `SCALETAIL_CLIENT_TOKEN`。两者用途不同，不能共用；真实值只能保存在部署机 `.env`，不能提交到 Git 或写进公开客户端安装包。
-
-4. 如需验证码，先按“验证码服务”章节部署 Cap，再填写同一站点对应的 challenge、siteverify 和 secret；暂时不用时设置 `CAPTCHA_ENABLED=false`。
-5. 检查最终配置并启动：
+3. 检查并启动：
 
 ```bash
-docker compose config
+docker compose config --quiet
 docker compose pull
 docker compose up -d
 docker compose ps
 ```
 
-6. 完成健康检查：
+4. 验证：
 
 ```bash
 curl -fsS http://127.0.0.1/api/health
 curl -fsS http://127.0.0.1:8080/health
-curl -sI http://127.0.0.1/ | head
+docker exec scaleforge-backend-public test -S /var/run/scaleforge/control/api.sock
+docker exec scaleforge-headscale test -S /var/run/scaleforge/client/api.sock
 ```
 
-首次启动会创建业务表和索引。数据库账号必须拥有建表、添加字段和创建索引权限；不要预先建立一套字段不完整的同名表。
+默认 Web 和 Headscale 端口绑定到回环地址，PostgreSQL 和三个 UDS 不应暴露到公网。Nginx 不信任入站的 `X-Forwarded-Proto`，而是使用部署参数 `SCALEFORGE_EXTERNAL_SCHEME` 生成后端协议；外层 TLS 终止时保持 `https`。仅在隔离的直连 HTTP 开发环境中，才同时设置 `SCALEFORGE_EXTERNAL_SCHEME=http` 与 `SESSION_COOKIE_SECURE=false`。
 
 ## 保留数据升级
 
-升级不会要求删除 PostgreSQL 数据卷。启动时会对缺少的业务表、字段和索引执行增量初始化：
+1. 记录当前三个镜像标签并备份 `.env`、Headscale 配置卷和数据库：
 
 ```bash
-cd ScaleForge
-git pull --ff-only
-cd docker
-
-cp .env .env.backup-$(date +%Y%m%d-%H%M%S)
-# 将 AE_VERSION、BACKEND_VERSION、NGINX_VERSION 更新为上文固定标签
-docker compose config
-docker compose pull
-docker compose up -d
-docker compose ps
+cd ScaleForge/docker
+cp .env ".env.backup-$(date +%Y%m%d-%H%M%S)"
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > "scaleforge-$(date +%Y%m%d-%H%M%S).sql"
 ```
 
-升级后重新执行两个健康检查，并查看最近日志：
+2. 更新代码和 `.env` 中的 `AE_VERSION`、`BACKEND_VERSION`、`NGINX_VERSION`。
+3. 首次升级到私有 HMAC 通道时生成 `secrets/scaleforge_internal_auth_key`，并确认 Headscale 与两个 ScaleForge 后端挂载的是同一个只读 secret。
+4. 执行 `docker compose config --quiet`，再 `docker compose pull && docker compose up -d`。
+5. 等待 `scaleforge-migrate` 成功退出，然后检查健康状态、登录、DNS、节点和路由。迁移默认等待数据库锁 15 秒、单条语句最多 5 分钟；需要调整时设置 `SCALEFORGE_MIGRATION_LOCK_TIMEOUT_MS` 和 `SCALEFORGE_MIGRATION_STATEMENT_TIMEOUT_MS`，不要让旧管理后端继续写入平台表。
+6. 不要执行 `docker compose down -v`；该命令会删除数据库和 Headscale 状态卷。
 
-```bash
-docker compose logs --tail=100 headscale admin-backend nginx
-curl -fsS http://127.0.0.1/api/health
-curl -fsS http://127.0.0.1:8080/health
-```
+### 首次引入私有 UDS 配置
 
-禁止执行 `docker compose down -v`，它会删除数据库和 Headscale 状态卷。升级前建议额外执行 PostgreSQL 逻辑备份；出现问题时把 `.env` 的三个版本变量改回旧标签，再执行 `docker compose up -d` 回滚镜像，数据库备份用于处理不可逆的数据迁移。
+旧的 Headscale 配置若没有 `scaleforge:` 段，Headscale 会拒绝启动并明确提示，不会静默退回旧 API Key 模式。
 
-常见端口：
+1. 先备份 Headscale 配置卷。
+2. 在 `.env` 临时设置 `HEADSCALE_FORCE_RENDER_CONFIG=1`。
+3. 执行一次受控重启，确认控制 UDS、客户端 UDS、登录和 DNS 正常。
+4. 立即恢复 `HEADSCALE_FORCE_RENDER_CONFIG=0`，避免以后重启覆盖平台保存的 DNS 配置。
 
-| 服务 | 默认端口 |
-|---|---:|
-| Nginx / Web 入口 | 80 |
-| ScaleForge API | 5175 |
-| Headscale-Admin-AE | 8080 |
-| PostgreSQL | 5432 |
-| DERP/STUN | 3478/3479，按 compose 配置为准 |
+该开关只用于从旧配置过渡，不是长期运行选项。
 
-公网只需要开放实际使用的 Web、Headscale 和 DERP/STUN 端口。PostgreSQL `5432`、ScaleForge 后端 `5175` 和容器内部管理接口不应直接暴露到公网，建议由 Nginx 和主机防火墙统一收口。
+### 账户升级注意事项
 
-## 本地开发
+- 旧预认证密钥和浏览器注册流程不会继续工作；新节点必须使用支持账户密码的 ScaleTail 版本。
+- 已注册节点在建立新的控制会话时同样需要兼容的新客户端完成账户证明。
+- 0.0.8 之前的客户端不能验证 OTA v3 策略；先手工覆盖安装一次 0.0.8，后续版本才可走 daemon OTA 无感覆盖升级。
+- 如果旧数据库含不受支持的 Werkzeug `scrypt:` 或 `pbkdf2:` 密码哈希，配套 Headscale 会失败关闭，而不会把哈希误当明文。升级前应先按配套服务端迁移说明重置这些账户密码。
+
+## 本地开发与验证
 
 后端：
 
-```bash
-cd api
-py -3 -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 5175 --reload
+```powershell
+cd D:\workspace-qoder\ScaleForge
+py -3 -m pip install -r requirements-prod.txt
+py -3 -m pytest -q
 ```
 
 前端：
 
-```bash
-cd web
-npm install
-npm run dev
+```powershell
+cd D:\workspace-qoder\ScaleForge\web
+npm ci
+npm run typecheck
 npm run build
 ```
 
-## 与三件套关系
+Compose 静态检查不需要 Docker daemon：
 
-```text
-ScaleTail 客户端
-  | 定时上报流量/请求摘要/策略状态
-  v
-ScaleForge 管理平台
-  | 共享数据库/API 管理用户、节点、路由、ACL、策略和安全事件
-  v
-Headscale-Admin-AE 控制服务
+```powershell
+cd D:\workspace-qoder\ScaleForge
+docker compose -f docker\docker-compose.yml config --quiet
 ```
 
-ScaleForge 负责看得见和管得动；Headscale-Admin-AE 负责控制协议和节点注册；ScaleTail 负责客户端连接和桌面体验。
+部署后还应从 Nginx 容器验证公共 UDS 代理链路：
 
-## 当前已验证
-
-- 后端核心文件使用 `py -3 -m py_compile` 编译通过。
-- 前端 `npm run build` 构建通过。
-- 新增路由已注册到 `api/main.py` 和 `api/routers/__init__.py`。
-- 前端 API 调用路径已和后端路由核对。
-- 数据库新增表和 Headscale-Admin-AE 启动同步逻辑已核对。
-
-## 已知边界
-
-- `rate_down_mbps` 字段已经存在，也会下发给客户端，但 ScaleTail 暂未做下载方向 TUN/内核级强制限速。
-- Windows 上传限速依赖客户端侧 QoS，权限不足时会回传策略应用失败，不会阻塞平台。
-- IP 定位是可选增强能力，未配置不会报错。
-- 如果数据库用户没有建表/建索引权限，首次启动会影响新增功能表初始化。
+```bash
+docker exec scaleforge-nginx wget -qO- http://127.0.0.1/api/health
+```
 
 ## 交流学习
 
-欢迎加入 ScaleForge 交流群，一起交流自建 Headscale、ScaleTail、ScaleForge 的部署、使用和二次开发经验。
+欢迎加入 ScaleForge 交流群，交流自建 Headscale、ScaleTail、ScaleForge 的部署、使用和二次开发。
 
 群号：`1041671099`
 
@@ -263,17 +283,10 @@ ScaleForge 负责看得见和管得动；Headscale-Admin-AE 负责控制协议�
 
 ## 打赏
 
-如果这个项目帮你节省了部署和维护时间，可以请作者喝杯咖啡：
+如果项目帮你节省了部署和维护时间，可以请作者喝杯咖啡：
 
 ![打赏](docs/screenshots/donate.jpg)
 
-感谢支持，项目会继续围绕自建 Headscale/ScaleTail 网络的易用性、稳定性和安全可视化迭代。
+## 致谢与许可
 
-## 致谢
-
-- [arounyf/Headscale-Admin-Pro](https://github.com/arounyf/Headscale-Admin-Pro)
-- [juanfont/headscale](https://github.com/juanfont/headscale)
-- [tailscale/tailscale](https://github.com/tailscale/tailscale)
-- [FastAPI](https://fastapi.tiangolo.com/)
-- [Vue](https://vuejs.org/)
-- [Element Plus](https://element-plus.org/)
+项目基于 [juanfont/headscale](https://github.com/juanfont/headscale)、[tailscale/tailscale](https://github.com/tailscale/tailscale) 生态裂变演进，并使用 FastAPI、Vue 3、Element Plus、PostgreSQL 和 Cap。使用和分发时请同时遵守本仓库及对应上游许可证。

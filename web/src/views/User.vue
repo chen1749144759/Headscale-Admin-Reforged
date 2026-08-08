@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>用户管理</h2><p>管理所有 Tailscale 机器（每台机器 = 一个用户），可直接设置访问控制、分组和标签</p></div>
+    <div class="page-header"><h2>机器管理</h2><p>管理所有 ScaleTail 机器，可配置访问控制、所属分组和节点名称</p></div>
     <div class="glass-card content-card">
       <div class="toolbar">
         <div class="toolbar-left">
@@ -35,22 +35,13 @@
             <span v-else><span class="status-dot offline"></span>离线</span>
           </template>
         </el-table-column>
-        <el-table-column label="标签" min-width="140">
-          <template #default="{ row }">
-            <div style="display:flex;flex-wrap:wrap;gap:3px" v-if="getNodeTags(row).length">
-              <el-tag v-for="t in getNodeTags(row)" :key="t" size="small" type="warning" effect="plain">{{ t }}</el-tag>
-            </div>
-            <span v-else style="color:var(--v3s-text-muted);font-size:12px">无标签</span>
-          </template>
-        </el-table-column>
         <el-table-column label="最后上线" width="140">
           <template #default="{ row }">{{ row.lastSeen ? timeAgo(row.lastSeen) : '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="330" fixed="right">
+        <el-table-column label="操作" width="285" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="showAclControl(row)">控制</el-button>
             <el-button type="warning" link size="small" @click="showChangeGroup(row)">分组</el-button>
-            <el-button type="success" link size="small" @click="showTagDialog(row)">标签</el-button>
             <el-button type="primary" link size="small" @click="showDetail(row)">详情</el-button>
             <el-button type="primary" link size="small" @click="showRename(row)">重命名</el-button>
             <el-popconfirm title="确认删除此机器？" @confirm="handleDelete(row)">
@@ -67,7 +58,7 @@
         <el-descriptions :column="2" size="small" border>
           <el-descriptions-item label="机器">{{ aclTarget.givenName || aclTarget.name }}</el-descriptions-item>
           <el-descriptions-item label="分组">{{ aclTarget.user?.name || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Tailscale IP" :span="2">
+          <el-descriptions-item label="ScaleTail IP" :span="2">
             <el-tag v-for="ip in (aclTarget.ipAddresses || [])" :key="ip" size="small" style="margin:2px">{{ ip }}</el-tag>
           </el-descriptions-item>
         </el-descriptions>
@@ -175,43 +166,12 @@
       </template>
     </el-dialog>
 
-    <!-- ═══ 标签管理弹窗 ═══ -->
-    <el-dialog v-model="tagVisible" title="管理机器标签" width="520px" destroy-on-close>
-      <details class="tip-collapse" style="margin-bottom:16px">
-        <summary class="tip-summary">什么是标签？（点击展开）</summary>
-        <div class="tip-body">
-          <p>标签 (Tag) 用于在 ACL 规则中标识一类机器。例如给服务器打上 <code>tag:server</code> 标签后，可以在访问规则中写 <code>tag:server</code> 作为来源或目标。</p>
-          <p>标签的拥有者 (tagOwners) 决定了谁可以给机器打特定标签，可在「ACL 规则」页面的标签拥有者部分管理。</p>
-        </div>
-      </details>
-      <div v-if="tagTarget" style="margin-bottom:12px">
-        <el-descriptions :column="2" size="small" border>
-          <el-descriptions-item label="机器">{{ tagTarget.givenName || tagTarget.name }}</el-descriptions-item>
-          <el-descriptions-item label="分组">{{ tagTarget.user?.name || '-' }}</el-descriptions-item>
-        </el-descriptions>
-      </div>
-      <div style="font-weight:600;margin-bottom:8px;font-size:13px">当前标签</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;min-height:32px">
-        <el-tag v-for="(t, i) in editTags" :key="t" closable type="warning" @close="editTags.splice(i, 1)">{{ t }}</el-tag>
-        <span v-if="!editTags.length" style="color:var(--v3s-text-muted);font-size:13px;line-height:24px">暂无标签</span>
-      </div>
-      <div style="display:flex;gap:8px">
-        <el-select v-model="newTagInput" filterable allow-create default-first-option placeholder="选择或输入标签（tag:xxx）" style="flex:1" @keyup.enter="addTag">
-          <el-option v-for="t in availableTags" :key="t" :label="t" :value="t" />
-        </el-select>
-        <el-button type="primary" size="small" @click="addTag">添加</el-button>
-      </div>
-      <template #footer>
-        <el-button @click="tagVisible = false">取消</el-button>
-        <el-button type="primary" :loading="tagSaving" @click="handleSaveTags">保存标签</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getNodes, deleteNode, renameNode, getNodeRoutes, getHsUsers, moveNodeUser, getAcl, updateAcl, setNodeTags } from '@/api'
+import { getNodes, deleteNode, renameNode, getNodeRoutes, getHsUsers, moveNodeUser, getAcl, updateAcl } from '@/api'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 
@@ -310,7 +270,7 @@ const newInboundPort = ref('*')
 
 function getNodeIdentifier(node) {
   // 用 user name 作为 ACL 标识（headscale ACL 中 src/dst 用 user name 匹配该 user 下所有节点）
-  // 如果节点有 Tailscale IP，也可以用 IP 做精确匹配
+  // 如果节点有 ScaleTail IP，也可以用 IP 做精确匹配
   const ips = node.ipAddresses || []
   const ipv4 = ips.find(ip => !ip.includes(':'))
   return ipv4 || node.user?.name || node.givenName || node.name
@@ -468,67 +428,6 @@ async function handleMoveGroup() {
     ElMessage.error('移动失败：' + (e?.response?.data?.detail || e.message || '可能当前 Headscale 版本不支持'))
   }
   groupSaving.value = false
-}
-
-// ═══ 标签管理 ═══
-const tagVisible = ref(false)
-const tagSaving = ref(false)
-const tagTarget = ref(null)
-const editTags = ref([])
-const newTagInput = ref('')
-const availableTags = ref([])
-
-function getNodeTags(node) {
-  // headscale node 中 forcedTags / validTags 字段
-  const tags = []
-  if (node.forcedTags && Array.isArray(node.forcedTags)) tags.push(...node.forcedTags)
-  if (node.validTags && Array.isArray(node.validTags)) tags.push(...node.validTags)
-  return [...new Set(tags)]
-}
-
-async function showTagDialog(row) {
-  tagTarget.value = row
-  editTags.value = [...getNodeTags(row)]
-  newTagInput.value = ''
-
-  // 从 ACL 的 tagOwners 中读取可用标签列表
-  try {
-    const res = await getAcl()
-    const raw = res.data || '{}'
-    const cleaned = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,\s*([}\]])/g, '$1')
-    const obj = JSON.parse(cleaned)
-    if (obj.tagOwners) {
-      availableTags.value = Object.keys(obj.tagOwners)
-    } else {
-      availableTags.value = []
-    }
-  } catch {
-    availableTags.value = []
-  }
-  tagVisible.value = true
-}
-
-function addTag() {
-  let val = newTagInput.value.trim()
-  if (!val) return ElMessage.warning('请输入标签名')
-  if (!val.startsWith('tag:')) val = `tag:${val}`
-  if (editTags.value.includes(val)) return ElMessage.warning('标签已存在')
-  editTags.value.push(val)
-  newTagInput.value = ''
-}
-
-async function handleSaveTags() {
-  if (!tagTarget.value) return
-  tagSaving.value = true
-  try {
-    await setNodeTags(tagTarget.value.id, editTags.value)
-    ElMessage.success('标签已更新')
-    tagVisible.value = false
-    loadNodes()
-  } catch (e) {
-    ElMessage.error('保存失败：' + (e?.response?.data?.detail || e.message || '未知错误'))
-  }
-  tagSaving.value = false
 }
 
 onMounted(loadNodes)

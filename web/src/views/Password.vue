@@ -35,7 +35,8 @@ const rules = {
   old_password: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
   new_password: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 个字符', trigger: 'blur' },
+    { min: 12, message: '密码至少 12 个字符', trigger: 'blur' },
+    { max: 72, message: '密码最多 72 个字符', trigger: 'blur' },
   ],
   confirm_password: [
     { required: true, message: '请确认新密码', trigger: 'blur' },
@@ -49,7 +50,8 @@ async function handleSubmit() {
   try {
     await changePassword({ old_password: form.old_password, new_password: form.new_password })
     ElMessage.success('密码修改成功，请重新登录')
-    setTimeout(() => userStore.logout(), 1500)
+    userStore.clearSession()
+    setTimeout(() => window.location.assign('/login'), 800)
   } catch {}
   saving.value = false
 }

@@ -1,22 +1,16 @@
 """
 ACL路由模块
-处理ACL规则的获取、更新、文件读写、重载等
+处理 ACL 规则的获取和热更新
 """
 import json
 import re
-import subprocess
-
-import psycopg2
-import psycopg2.extras
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .dependencies import CurrentUser, get_current_user, require_manager, get_db_conn, record_log
+from .dependencies import CurrentUser, require_manager, get_db_conn, record_log
 from .utils import hs_request
 
 router = APIRouter(prefix="/api/acl", tags=["ACL"])
-
-ACL_FILE_PATH = "/etc/headscale/acl.hujson"
 
 class AclUpdateReq(BaseModel):
     acl: str
@@ -27,7 +21,7 @@ class AclUpdateReq(BaseModel):
 # 否则会被解析器当作 Host 别名导致 "host not defined in policy" 错误。
 # 以下工具函数在后端层做透明转换，前端无需感知。
 
-_SPECIAL_PREFIXES = ('group:', 'tag:', 'autogroup:')
+_SPECIAL_PREFIXES = ('group:', 'autogroup:')
 
 
 def _is_ip_or_cidr(s: str) -> bool:
@@ -83,6 +77,39 @@ def _clean_hujson(text: str) -> str:
     return text
 
 
+def _parse_policy(acl_text: str) -> dict:
+    try:
+        policy = json.loads(_clean_hujson(acl_text))
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(400, f'ACL 不是有效的 HuJSON/JSON: {exc}') from exc
+
+    if not isinstance(policy, dict):
+        raise HTTPException(400, 'ACL 根节点必须是对象')
+
+    return policy
+
+
+def _reject_identity_tags(policy: dict) -> None:
+    """账户密码节点不支持身份标签，拒绝保存永远无法生效的规则。"""
+    if policy.get('tagOwners'):
+        raise HTTPException(400, '账户密码节点不支持身份标签，请删除 tagOwners')
+
+    def contains_tag(value) -> bool:
+        if isinstance(value, str):
+            return value.startswith('tag:')
+        if isinstance(value, list):
+            return any(contains_tag(item) for item in value)
+        if isinstance(value, dict):
+            return any(
+                (isinstance(key, str) and key.startswith('tag:')) or contains_tag(item)
+                for key, item in value.items()
+            )
+        return False
+
+    if contains_tag(policy):
+        raise HTTPException(400, '账户密码节点不支持 tag: 身份标签引用，请改用账户、分组或 IP')
+
+
 def _transform_acl_aliases(acl_text: str, transform_fn) -> str:
     """对 ACL JSON 中所有用户名引用执行 transform_fn 转换"""
     try:
@@ -101,11 +128,6 @@ def _transform_acl_aliases(acl_text: str, transform_fn) -> str:
     for key in groups:
         groups[key] = [transform_fn(m) for m in groups[key]]
 
-    # 转换 tagOwners 中的拥有者列表
-    tag_owners = obj.get('tagOwners', {})
-    for key in tag_owners:
-        tag_owners[key] = [transform_fn(o) for o in tag_owners[key]]
-
     return json.dumps(obj, indent=2, ensure_ascii=False)
 
 
@@ -119,11 +141,11 @@ def transform_acl_from_headscale(acl_text: str) -> str:
     return _transform_acl_aliases(acl_text, _strip_user_suffix)
 
 @router.get('')
-def get_acl(user: CurrentUser = Depends(get_current_user)):
+def get_acl(user: CurrentUser = Depends(require_manager)):
     """获取ACL规则（优先从 Headscale API 读取，兜底读管理数据库）"""
     # 优先从 Headscale policy API 读取（database 模式）
     try:
-        result = hs_request('GET', '/api/v1/policy')
+        result = hs_request('GET', '/api/v1/policy', token=user.session_token)
         if result.get('code') == 0:
             data = result.get('data', {})
             policy_text = data.get('policy', '') if isinstance(data, dict) else ''
@@ -148,84 +170,30 @@ def get_acl(user: CurrentUser = Depends(get_current_user)):
 def update_acl(req: AclUpdateReq, user: CurrentUser = Depends(require_manager)):
     """更新ACL规则（同步写入 Headscale API + 管理数据库）"""
     acl = req.acl
+    policy = _parse_policy(acl)
+    _reject_identity_tags(policy)
     conn = get_db_conn()
     try:
         cur = conn.cursor()
         # 保存到管理面板数据库（历史记录，保存前端原始格式）
-        cur.execute("INSERT INTO acl (acl, user_id) VALUES (%s, %s)", (acl, user.id))
+        cur.execute("INSERT INTO acl (acl, account_id) VALUES (%s, %s)", (acl, user.id))
 
         # 为用户名添加 @ 后缀后再发送给 Headscale
         acl_for_hs = transform_acl_for_headscale(acl)
 
         # 通过 Headscale API 写入 policy（database 模式直接生效）
-        hs_result = hs_request('PUT', '/api/v1/policy', {'policy': acl_for_hs})
+        hs_result = hs_request(
+            'PUT',
+            '/api/v1/policy',
+            {'policy': acl_for_hs},
+            token=user.session_token,
+        )
         if hs_result.get('code') != 0:
-            msg = hs_result.get('msg', '')
-            print(f'写入 Headscale policy 失败: {msg}')
-            # 不阻断流程，可能 headscale 版本不支持此接口，走文件兜底
-            try:
-                with open(ACL_FILE_PATH, 'w') as f:
-                    f.write(acl_for_hs)
-            except Exception as e:
-                print(f'写入 ACL 文件也失败: {e}')
+            conn.rollback()
+            raise HTTPException(502, hs_result.get('msg', '写入 Headscale policy 失败'))
 
         record_log(conn, user.id, '更新 ACL 规则')
         conn.commit()
         return {'code': 0, 'msg': 'ACL 更新成功'}
     finally:
         conn.close()
-
-@router.post('/rewrite')
-def rewrite_acl(user: CurrentUser = Depends(require_manager)):
-    """重写 ACL 文件（从数据库读取并写入到文件）"""
-    conn = get_db_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT acl FROM acl ORDER BY id DESC LIMIT 1")
-        row = cur.fetchone()
-        acl_text = row['acl'] if row else ''
-        
-        if not acl_text:
-            raise HTTPException(400, '数据库中没有 ACL 规则')
-        
-        try:
-            with open(ACL_FILE_PATH, 'w') as f:
-                f.write(transform_acl_for_headscale(acl_text))
-            record_log(conn, user.id, '重写 ACL 文件')
-            conn.commit()
-            return {'code': 0, 'msg': 'ACL 文件重写成功'}
-        except Exception as e:
-            raise HTTPException(500, f'写入 ACL 文件失败: {str(e)}')
-    finally:
-        conn.close()
-
-@router.get('/read')
-def read_acl_file(user: CurrentUser = Depends(require_manager)):
-    """读取 /etc/headscale/acl.hujson 文件内容"""
-    try:
-        with open(ACL_FILE_PATH, 'r') as f:
-            acl_data = json.load(f)
-        
-        acls = acl_data.get('acls', [])
-        return {'code': 0, 'data': {'acl_path': ACL_FILE_PATH, 'acls': acls}}
-    except FileNotFoundError:
-        raise HTTPException(404, f'错误: 文件 {ACL_FILE_PATH} 未找到')
-    except json.JSONDecodeError:
-        raise HTTPException(500, f'错误: 无法解析 {ACL_FILE_PATH} 中的 JSON 数据')
-    except Exception as e:
-        raise HTTPException(500, f'发生未知错误: {str(e)}')
-
-@router.post('/reload')
-def reload_headscale_api(user: CurrentUser = Depends(require_manager)):
-    """重载 headscale 服务"""
-    try:
-        subprocess.run(['systemctl', 'reload', 'headscale'], capture_output=True, timeout=10)
-        conn = get_db_conn()
-        try:
-            record_log(conn, user.id, '重载 headscale 服务')
-            conn.commit()
-        finally:
-            conn.close()
-        return {'code': 0, 'msg': 'headscale 服务重载成功'}
-    except Exception as e:
-        raise HTTPException(500, f'重载 headscale 服务失败: {str(e)}')

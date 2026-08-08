@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>部署帮助</h2><p>在各平台上安装 Tailscale 客户端并连接到本服务器</p></div>
+    <div class="page-header"><h2>部署帮助</h2><p>安装 ScaleTail 客户端并使用平台账户连接</p></div>
 
     <el-row :gutter="16">
       <el-col :xs="24" :sm="8" v-for="(p, i) in platforms" :key="i">
@@ -17,25 +17,32 @@
     </el-row>
 
     <div class="glass-card content-card" style="margin-top:16px">
-      <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">连接命令</h3>
-      <p style="color:var(--v3s-text-secondary);margin-bottom:12px">安装 Tailscale 客户端后，使用以下命令连接到本 Headscale 服务器：</p>
+      <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">账户密码登录</h3>
+      <p style="color:var(--v3s-text-secondary);margin-bottom:12px">
+        Windows 请在 ScaleTail 连接页面填写控制服务器、平台用户名和密码。Linux 交互式登录只在终端内隐藏读取密码，不会打开浏览器：
+      </p>
       <div class="code-block" style="position:relative">
-        <span>tailscale up --login-server {{ serverUrl }} --authkey YOUR_AUTH_KEY --accept-routes</span>
-        <el-button type="primary" link size="small" class="copy-btn"
-          @click="copy(`tailscale up --login-server ${serverUrl} --authkey YOUR_AUTH_KEY --accept-routes`)">复制</el-button>
+        <span>{{ interactiveLoginCommand }}</span>
+        <el-button type="primary" link size="small" class="copy-btn" @click="copy(interactiveLoginCommand)">复制</el-button>
       </div>
       <p style="color:var(--v3s-text-muted);font-size:12px;margin-top:8px">
-        将 YOUR_AUTH_KEY 替换为在「预认证密钥」页面创建的密钥。<code>--accept-routes</code> 用于接收其他节点通告的子网路由。注意：--login-server 地址是 Headscale 控制服务器（默认端口 8080），而非管理面板地址。
+        自动化环境使用仅含一行密码的文件。该文件必须为当前用户所有且权限为 <code>0600</code>，不要把密码写入命令参数、脚本或镜像层：
+      </p>
+      <div class="code-block code-pre" style="position:relative;margin-top:10px">
+        <code>{{ passwordFileLoginCommand }}</code>
+        <el-button type="primary" link size="small" class="copy-btn" @click="copy(passwordFileLoginCommand)">复制</el-button>
+      </div>
+      <p style="color:var(--v3s-text-muted);font-size:12px;margin-top:8px">
+        平台账户与 Headscale 网络分组一对一绑定。首次登录要求修改初始密码；密码修改满 90 天后，必须先更新密码才能继续登录或上报。
       </p>
     </div>
 
     <div class="glass-card content-card" style="margin-top:16px">
       <h3 style="font-size:16px;font-weight:600;margin-bottom:12px">子网路由通告</h3>
-      <p style="color:var(--v3s-text-secondary);margin-bottom:12px">如需将本机作为子网路由器，使机器可以访问其他子网，在目标机器上执行：</p>
+      <p style="color:var(--v3s-text-secondary);margin-bottom:12px">先完成账户登录，再用 <code>scaletail set</code> 宣告本地子网并接受其他节点已批准的路由：</p>
       <div class="code-block" style="position:relative">
-        <span>tailscale up --login-server {{ serverUrl }} --advertise-routes=10.0.0.0/24,192.168.1.0/24</span>
-        <el-button type="primary" link size="small" class="copy-btn"
-          @click="copy(`tailscale up --login-server ${serverUrl} --advertise-routes=10.0.0.0/24,192.168.1.0/24`)">复制</el-button>
+        <span>{{ routeCommand }}</span>
+        <el-button type="primary" link size="small" class="copy-btn" @click="copy(routeCommand)">复制</el-button>
       </div>
       <p style="color:var(--v3s-text-muted);font-size:12px;margin-top:8px">
         通告后需在「路由管理」页面批准路由才会生效。也可在 ACL 中配置 autoApprovers 实现自动批准。
@@ -67,7 +74,7 @@
           <div class="tunnel-pipe"></div>
           <div class="tunnel-tag">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22V2M5 12l7-7 7 7"/></svg>
-            Tailscale WireGuard 隧道
+            ScaleTail WireGuard 隧道
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M5 12l7 7 7-7"/></svg>
           </div>
           <div class="tunnel-pipe"></div>
@@ -94,7 +101,7 @@
       <!-- 原理说明 -->
       <div class="s2s-principle">
         <b>核心原理 — SNAT（源地址转换）</b><br>
-        B 节点默认开启 SNAT（<code>--snat-subnet-routes=true</code>），C/D/E 的请求经 B 转发时，源 IP 被替换为 B 的 Tailscale 地址，远程节点的响应自然沿隧道返回 B，B 再转回内网。整个过程 C/D/E 无需安装客户端。<br>
+        B 节点启用 SNAT（<code>--snat-subnet-routes=true</code>）后，C/D/E 的请求经 B 转发时，源 IP 被替换为 B 的 ScaleTail 地址，远程节点的响应自然沿隧道返回 B，B 再转回内网。整个过程 C/D/E 无需安装客户端。<br>
         <span class="s2s-warn">⚠ 关键前提：C/D/E 必须添加指向 B 的静态路由，否则流量不知道发往何处。</span>
       </div>
 
@@ -117,31 +124,45 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 
 const userStore = useUserStore()
-const serverUrl = ref('')
+const serverUrl = computed(() =>
+  String(userStore.systemStatus?.server_url || '').trim() || '<HEADSCALE_SERVER_URL>'
+)
+
+const interactiveLoginCommand = computed(() =>
+  `sudo scaletail login --login-server ${serverUrl.value} --username <账户名>`
+)
+
+const passwordFileLoginCommand = computed(() =>
+  `sudo install -m 600 /dev/null /etc/scaletail/account-password\n` +
+  `sudoedit /etc/scaletail/account-password\n` +
+  `sudo scaletail login --login-server ${serverUrl.value} --username <账户名> --password-file /etc/scaletail/account-password`
+)
+
+const routeCommand = 'sudo scaletail set --advertise-routes=10.0.0.0/24,192.168.1.0/24 --accept-routes=true'
 
 const s2sSteps = computed(() => [
   {
-    title: 'B 节点：宣告子网路由 + 开启 IP 转发',
-    code: `tailscale up --login-server ${serverUrl.value} --advertise-routes=192.168.1.0/24 --accept-routes\n\n# 开启 IP 转发（永久生效）\necho 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf\necho 'net.ipv6.conf.all.forwarding = 1' >> /etc/sysctl.conf\nsysctl -p`
+    title: 'B 节点：登录后宣告子网路由 + 开启 IP 转发',
+    code: `sudo scaletail set --advertise-routes=192.168.1.0/24 --accept-routes=true --snat-subnet-routes=true\n\n# 开启 IP 转发（永久生效）\necho 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf\necho 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.conf\nsudo sysctl -p`
   },
   {
-    title: 'F / G 节点：宣告各自子网（如需访问其背后的内网设备）',
-    code: `# 在 F 上\ntailscale up --login-server ${serverUrl.value} --advertise-routes=172.16.1.0/24 --accept-routes\n\n# 在 G 上\ntailscale up --login-server ${serverUrl.value} --advertise-routes=172.16.2.0/24 --accept-routes\n\n# F / G 同样需要开启 IP 转发`
+    title: 'F / G 节点：登录后宣告各自子网（如需访问其背后的内网设备）',
+    code: `# 在 F 上\nsudo scaletail set --advertise-routes=172.16.1.0/24 --accept-routes=true --snat-subnet-routes=true\n\n# 在 G 上\nsudo scaletail set --advertise-routes=172.16.2.0/24 --accept-routes=true --snat-subnet-routes=true\n\n# F / G 同样需要开启 IP 转发`
   },
   {
     title: 'Headscale：批准所有子网路由',
-    hint: '在管理面板「路由管理」页面操作，或命令行：',
-    code: `headscale routes list\nheadscale routes enable -r <route_id>`
+    hint: '在 ScaleForge「路由管理」页面逐项批准；无需在服务端执行命令。',
+    code: '路由管理 -> 选择待审批路由 -> 批准'
   },
   {
     title: 'C / D / E：添加静态路由（关键步骤）',
     hint: '告诉无客户端设备将远程流量发给 B（将 192.168.1.x 替换为 B 的内网 IP）：',
-    code: `# 访问远程 Tailscale 节点 (100.64.x.x)\nip route add 100.64.0.0/10 via 192.168.1.x\n\n# 访问 F 背后子网\nip route add 172.16.1.0/24 via 192.168.1.x\n\n# 访问 G 背后子网\nip route add 172.16.2.0/24 via 192.168.1.x\n\n# 如需永久生效，写入 /etc/network/interfaces 或 netplan 配置`
+    code: `# 访问远程 ScaleTail 节点 (100.64.x.x)\nsudo ip route add 100.64.0.0/10 via 192.168.1.x\n\n# 访问 F 背后子网\nsudo ip route add 172.16.1.0/24 via 192.168.1.x\n\n# 访问 G 背后子网\nsudo ip route add 172.16.2.0/24 via 192.168.1.x\n\n# 如需永久生效，写入 /etc/network/interfaces 或 netplan 配置`
   },
   {
     title: 'ACL 策略：允许跨网段访问',
@@ -149,23 +170,23 @@ const s2sSteps = computed(() => [
   }
 ])
 
-const platforms = [
+const platforms = computed(() => [
   {
     icon: '🐧', title: 'Linux',
-    desc: '通过官方脚本一键安装',
-    cmd: 'curl -fsSL https://tailscale.com/install.sh | sh',
+    desc: '安装 ScaleTail Linux 构建物',
+    cmd: interactiveLoginCommand.value,
   },
   {
     icon: '🪟', title: 'Windows',
-    desc: '下载官方 MSI 安装包',
-    cmd: 'winget install tailscale.tailscale',
+    desc: '安装 ScaleTail 桌面客户端',
+    cmd: '运行 ScaleTail 安装包并打开连接页面',
   },
   {
     icon: '📱', title: 'iOS / Android',
-    desc: '在应用商店搜索 Tailscale',
-    cmd: 'App Store / Google Play → 搜索 "Tailscale"',
+    desc: '当前未提供定制移动端',
+    cmd: '暂不支持平台账户登录',
   },
-]
+])
 
 function copy(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -185,16 +206,6 @@ function fallbackCopy(text) {
   document.body.removeChild(ta)
 }
 
-onMounted(() => {
-  // login-server 应指向 headscale 控制服务器（默认8080），而非前端面板地址
-  const hsUrl = userStore.systemStatus?.server_url
-  if (hsUrl) {
-    serverUrl.value = hsUrl
-  } else {
-    // fallback: 用当前域名 + headscale 默认端口
-    serverUrl.value = `http://${window.location.hostname}:8080`
-  }
-})
 </script>
 
 <style scoped>

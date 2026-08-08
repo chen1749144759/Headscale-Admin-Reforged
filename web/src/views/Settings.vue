@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>系统设置</h2><p>配置 Headscale 连接和平台参数</p></div>
+    <div class="page-header"><h2>系统设置</h2><p>管理客户端 DNS 下发策略</p></div>
 
     <!-- Headscale 状态卡片 -->
     <div class="glass-card content-card" style="margin-bottom:16px">
@@ -10,11 +10,7 @@
             {{ form.headscale_running ? 'Headscale 运行中' : 'Headscale 已停止' }}
           </el-tag>
           <el-text v-if="form.headscale_version" type="info" size="small">{{ versionShort }}</el-text>
-        </div>
-        <div style="display:flex;gap:8px">
-          <el-button :type="form.headscale_running ? 'danger' : 'success'" @click="handleSwitch">
-            {{ form.headscale_running ? '停止服务' : '启动服务' }}
-          </el-button>
+          <el-text v-if="form.server_url" type="info" size="small">{{ form.server_url }}</el-text>
         </div>
       </div>
     </div>
@@ -39,18 +35,6 @@
       </div>
 
       <el-form :model="form" label-width="130px" label-position="right" style="max-width:760px" :disabled="!editMode">
-        <el-divider content-position="left">Headscale 连接</el-divider>
-        <el-form-item label="服务器地址">
-          <el-input v-model="form.server_url" placeholder="http://127.0.0.1:18919" />
-          <div class="form-tip">Headscale 监听的地址和端口</div>
-        </el-form-item>
-        <el-form-item label="监听网卡">
-          <el-select v-model="form.server_net" placeholder="选择网卡" clearable style="width:100%">
-            <el-option v-for="n in netInterfaces" :key="n" :label="n" :value="n" />
-          </el-select>
-          <div class="form-tip">用于流量统计的网卡接口</div>
-        </el-form-item>
-
         <div ref="dnsSectionRef" class="settings-anchor"></div>
         <el-divider content-position="left">DNS 下发</el-divider>
         <el-form-item label="MagicDNS">
@@ -58,8 +42,8 @@
           <div class="form-tip">开启后客户端可解析节点名称和服务端下发的 DNS 记录</div>
         </el-form-item>
         <el-form-item label="基础域名">
-          <el-input v-model="form.dns_base_domain" placeholder="hs.admin.pro" />
-          <div class="form-tip">例如 hs.admin.pro，客户端节点名称会进入该域名空间</div>
+          <el-input v-model="form.dns_base_domain" readonly />
+          <div class="form-tip">由 Headscale 启动配置确定，避免运行中更名导致节点域名不一致</div>
         </el-form-item>
         <el-form-item label="覆盖本地 DNS">
           <el-switch v-model="form.dns_override_local" active-text="使用下发 DNS" inactive-text="仅作备用" />
@@ -72,7 +56,7 @@
             :rows="4"
             placeholder="1.1.1.1&#10;8.8.8.8"
           />
-          <div class="form-tip">每行一个 DNS 地址，保存后需重启 Headscale 服务才会完整生效</div>
+          <div class="form-tip">每行一个 IP 或 HTTPS DoH 地址，保存后立即热下发</div>
         </el-form-item>
         <el-form-item label="搜索域">
           <el-input
@@ -83,22 +67,6 @@
           />
           <div class="form-tip">可选，每行一个搜索域；留空则只使用基础域名</div>
         </el-form-item>
-        <el-form-item label="配置文件">
-          <el-input :model-value="form.headscale_config_path || '未配置 HEADSCALE_CONFIG_PATH'" readonly />
-          <div class="form-tip">
-            {{ form.headscale_config_writable ? '当前配置文件可写，保存会同步写入 Headscale 配置' : '当前配置文件不可写，保存仅会写入 ScaleForge 配置' }}
-          </div>
-        </el-form-item>
-
-        <el-divider content-position="left">API 密钥</el-divider>
-        <el-form-item label="Bearer Token">
-          <div style="display:flex;gap:8px;width:100%">
-            <el-input :model-value="maskedToken" readonly />
-            <el-button type="warning" @click="handleRefreshKey" :loading="refreshing" :disabled="!editMode">刷新</el-button>
-          </div>
-          <div class="form-tip">Headscale API 认证密钥，刷新后旧密钥失效</div>
-        </el-form-item>
-
         <el-form-item v-if="editMode">
           <el-button type="primary" :loading="saving" @click="handleSave" size="large">
             <el-icon style="margin-right:4px"><Check /></el-icon>保存设置
@@ -108,21 +76,6 @@
       </el-form>
     </div>
 
-    <!-- 密码确认弹窗 -->
-    <el-dialog v-model="pwdDialogVisible" title="安全验证" width="400px" :close-on-click-modal="false">
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
-        <template #title>修改系统设置属于敏感操作，请输入当前账户密码以确认身份</template>
-      </el-alert>
-      <el-form @submit.prevent="confirmSave">
-        <el-form-item label="当前密码" label-width="80px">
-          <el-input v-model="confirmPwd" type="password" show-password placeholder="请输入当前账户密码" ref="pwdInputRef" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="pwdDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="confirmSave">确认保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -130,39 +83,27 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { getSettings, updateSettings, refreshApiKey, login } from '@/api'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { getSettings, updateSettings } from '@/api'
+import { ElMessage } from 'element-plus'
 import { Lock, Unlock, Check } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const route = useRoute()
 const saving = ref(false)
-const refreshing = ref(false)
-const netInterfaces = ref([])
 const editMode = ref(false)
-const pwdDialogVisible = ref(false)
-const confirmPwd = ref('')
-const pwdInputRef = ref(null)
 const dnsSectionRef = ref(null)
 const dnsGlobalNameserversText = ref('')
 const dnsSearchDomainsText = ref('')
 let formBackup = null
 
 const form = ref({
-  server_url: '', server_net: '', bearer_token: '',
+  server_url: '',
   headscale_running: false, headscale_version: '',
   dns_magic_dns: true,
   dns_base_domain: 'hs.admin.pro',
   dns_override_local: true,
   dns_global_nameservers: [],
   dns_search_domains: [],
-  headscale_config_path: '',
-  headscale_config_writable: false,
-})
-
-const maskedToken = computed(() => {
-  const t = form.value.bearer_token || ''
-  return t.length > 12 ? t.slice(0, 8) + '****' + t.slice(-4) : t
 })
 
 const versionShort = computed(() => {
@@ -178,7 +119,6 @@ async function loadSettings() {
     form.value = { ...form.value, ...d }
     dnsGlobalNameserversText.value = (d.dns_global_nameservers || []).join('\n')
     dnsSearchDomainsText.value = (d.dns_search_domains || []).join('\n')
-    netInterfaces.value = d.network_interfaces || []
   } catch {}
 }
 
@@ -208,65 +148,22 @@ function parseLines(value) {
     .filter(Boolean))]
 }
 
-// 点击保存 → 弹出密码确认
-function handleSave() {
-  confirmPwd.value = ''
-  pwdDialogVisible.value = true
-  nextTick(() => pwdInputRef.value?.focus())
-}
-
-// 密码确认后真正保存
-async function confirmSave() {
-  if (!confirmPwd.value) return ElMessage.warning('请输入密码')
+async function handleSave() {
   saving.value = true
   try {
-    // 验证密码：调用 login 接口
-    await login({ username: userStore.userInfo.name, password: confirmPwd.value })
-    // 密码正确，执行保存
     await updateSettings({
-      server_url: form.value.server_url,
-      server_net: form.value.server_net,
       dns_magic_dns: form.value.dns_magic_dns,
-      dns_base_domain: form.value.dns_base_domain,
       dns_override_local: form.value.dns_override_local,
       dns_global_nameservers: parseLines(dnsGlobalNameserversText.value),
       dns_search_domains: parseLines(dnsSearchDomainsText.value),
     })
-    ElMessage.success('设置已保存，DNS 变更需重启 Headscale 后生效')
-    pwdDialogVisible.value = false
+    ElMessage.success('设置已保存，DNS 配置已热下发')
     editMode.value = false
     formBackup = null
     await loadSettings()
     await userStore.fetchSystemStatus()
-  } catch (e) {
-    const msg = e?.response?.data?.msg || e?.response?.data?.detail || ''
-    if (msg.includes('密码') || msg.includes('password') || e?.response?.status === 401) {
-      ElMessage.error('密码验证失败，请重新输入')
-    }
-  }
+  } catch {}
   saving.value = false
-}
-
-async function handleRefreshKey() {
-  try {
-    await ElMessageBox.confirm('刷新后旧 API Key 将失效，确认？', '刷新 API Key', { type: 'warning' })
-    refreshing.value = true
-    const res = await refreshApiKey()
-    form.value.bearer_token = res.data || form.value.bearer_token
-    ElMessage.success('API Key 已刷新')
-  } catch {}
-  refreshing.value = false
-}
-
-async function handleSwitch() {
-  const action = form.value.headscale_running ? 'stop' : 'start'
-  const label = form.value.headscale_running ? '停止' : '启动'
-  try {
-    await ElMessageBox.confirm(`确认${label} Headscale 服务？`, `${label}服务`, { type: 'warning' })
-    await updateSettings({ headscale_action: action })
-    ElMessage.success(`${label}指令已发送`)
-    setTimeout(async () => { await loadSettings(); await userStore.fetchSystemStatus() }, 3000)
-  } catch {}
 }
 
 function scrollToRouteSection() {

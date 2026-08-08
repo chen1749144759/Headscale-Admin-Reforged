@@ -10,7 +10,15 @@ import psycopg2.extras
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from .dependencies import CFG, CurrentUser, get_current_user, require_manager, get_db_conn, record_log
+from .dependencies import (
+    CFG,
+    CurrentUser,
+    get_current_user,
+    get_db_conn,
+    record_log,
+    require_manager,
+    trusted_service_url,
+)
 
 router = APIRouter(prefix="/api/security", tags=["安全审计"])
 
@@ -69,7 +77,11 @@ DEFAULT_RISK_RULES = [
 
 
 @router.get('/summary')
-def security_summary(user: CurrentUser = Depends(get_current_user)):
+def security_summary(user: CurrentUser = Depends(require_manager)):
+    geo_template = os.environ.get('IP_GEOLOOKUP_URL') or str(CFG.get('ip_geolookup_url') or '')
+    geo_probe = geo_template.replace('{ip}', '192.0.2.1') if geo_template else ''
+    if geo_probe and '{ip}' not in geo_template:
+        geo_probe = geo_probe.rstrip('/') + '/192.0.2.1'
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -90,7 +102,7 @@ def security_summary(user: CurrentUser = Depends(get_current_user)):
                 'levels': levels,
                 'ip_observations': ip_count,
                 'trusted_networks': trusted_count,
-                'geo_lookup_enabled': bool(os.environ.get('IP_GEOLOOKUP_URL') or CFG.get('ip_geolookup_url')),
+                'geo_lookup_enabled': bool(trusted_service_url(geo_probe)),
             }
         }
     finally:
@@ -104,7 +116,7 @@ def list_events(
     level: str = '',
     status: str = '',
     event_type: str = '',
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_manager),
 ):
     page = max(1, page)
     size = max(1, min(size, 100))
@@ -175,7 +187,7 @@ def update_event_status(event_id: int, req: EventStatusReq, user: CurrentUser = 
         cur = conn.cursor()
         cur.execute("""
             UPDATE security_events
-            SET status=%s, handled_by=%s, handled_at=NOW()
+            SET status=%s, handled_by_account_id=%s, handled_at=NOW()
             WHERE id=%s
         """, (req.status, user.id, event_id))
         record_log(conn, user.id, f'处理安全事件 #{event_id}: {req.status}')
@@ -190,7 +202,7 @@ def ip_observations(
     machine_id: int | None = None,
     page: int = 1,
     size: int = 20,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_manager),
 ):
     page = max(1, page)
     size = max(1, min(size, 100))
@@ -245,7 +257,7 @@ def create_trusted_network(req: TrustedNetworkReq, user: CurrentUser = Depends(r
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            INSERT INTO trusted_networks (kind, value, description, enabled, created_by)
+            INSERT INTO trusted_networks (kind, value, description, enabled, created_by_account_id)
             VALUES (%s, %s, %s, %s, %s)
             RETURNING id
         """, (req.kind, req.value, req.description, req.enabled, user.id))

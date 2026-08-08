@@ -6,7 +6,7 @@ import psycopg2
 import psycopg2.extras
 from fastapi import APIRouter, Depends
 
-from .dependencies import CurrentUser, get_current_user, get_db_conn
+from .dependencies import CurrentUser, require_manager, get_db_conn
 
 router = APIRouter(prefix="/api/logs", tags=["日志"])
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/logs", tags=["日志"])
 def list_logs(
     page: int = 1,
     size: int = 20,
-    user: CurrentUser = Depends(get_current_user)
+    user: CurrentUser = Depends(require_manager)
 ):
     """获取操作日志列表"""
     conn = get_db_conn()
@@ -26,8 +26,10 @@ def list_logs(
         total = cur.fetchone()['count']
         
         cur.execute("""
-            SELECT l.id, l.content, TO_CHAR(l.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at, u.name as user_name
-            FROM log l LEFT JOIN users u ON l.user_id = u.id
+            SELECT l.id, l.content, TO_CHAR(l.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at,
+                   COALESCE(a.username, '历史账户') as user_name
+            FROM log l
+            LEFT JOIN accounts a ON l.account_id = a.id
             ORDER BY l.created_at DESC LIMIT %s OFFSET %s
         """, (size, offset))
         rows = cur.fetchall()

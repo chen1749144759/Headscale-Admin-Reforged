@@ -1,10 +1,12 @@
 __pycache__/
 *.pyc
-migrations/
 blueprints/__pycache__/
 /headscale
 venv/
 .env
+docker/.env
+docker/secrets/*
+!docker/secrets/*.example
 *.db
 /config.yaml
 

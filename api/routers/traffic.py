@@ -18,7 +18,47 @@ router = APIRouter(prefix="/api/traffic", tags=["流量统计"])
 
 
 _last_maintenance_at = 0.0
-_scaletail_network_cache: dict[str, Any] = {"loaded_at": 0.0, "networks": None}
+_scaletail_network_cache: dict[str, dict[str, Any]] = {}
+
+
+def _account_scope(user: CurrentUser, table_alias: str) -> tuple[str, list[int]]:
+    """Authorize historical rows by the node's current owner, not stale snapshots."""
+    if user.is_manager():
+        return "", []
+    if user.network_user_id is None:
+        return " AND 1=0", []
+    return f"""
+        AND EXISTS (
+            SELECT 1
+            FROM nodes scope_node
+            WHERE scope_node.id = {table_alias}.machine_id
+              AND scope_node.user_id = %s
+              AND scope_node.deleted_at IS NULL
+        )
+    """, [user.network_user_id]
+
+
+def _append_account_scope(
+    where: list[str],
+    params: list[Any],
+    user: CurrentUser,
+    table_alias: str,
+) -> None:
+    if user.is_manager():
+        return
+    if user.network_user_id is None:
+        where.append("1=0")
+        return
+    where.append(f"""
+        EXISTS (
+            SELECT 1
+            FROM nodes scope_node
+            WHERE scope_node.id = {table_alias}.machine_id
+              AND scope_node.user_id = %s
+              AND scope_node.deleted_at IS NULL
+        )
+    """)
+    params.append(user.network_user_id)
 
 
 def _extract_hs_nodes(result: Any) -> list[dict]:
@@ -32,11 +72,13 @@ def _extract_hs_nodes(result: Any) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
-def _load_scaletail_networks() -> list[ipaddress._BaseNetwork]:
+def _load_scaletail_networks(user: CurrentUser) -> list[ipaddress._BaseNetwork]:
     """用于展示过滤：Tailnet 地址与已批准/已生效宣告路由都视为 ScaleTail 流量目标。"""
     now = time.time()
-    cached = _scaletail_network_cache.get("networks")
-    if cached is not None and now - float(_scaletail_network_cache.get("loaded_at") or 0) < 60:
+    cache_key = "manager" if user.is_manager() else f"user:{user.id}"
+    cache = _scaletail_network_cache.get(cache_key, {})
+    cached = cache.get("networks")
+    if cached is not None and now - float(cache.get("loaded_at") or 0) < 60:
         return cached
 
     networks: list[ipaddress._BaseNetwork] = [
@@ -44,7 +86,13 @@ def _load_scaletail_networks() -> list[ipaddress._BaseNetwork]:
         ipaddress.ip_network("fd7a:115c:a1e0::/48"),
     ]
     try:
-        for node in _extract_hs_nodes(hs_request('GET', '/api/v1/node')):
+        for node in _extract_hs_nodes(
+            hs_request(
+                'GET',
+                '/api/v1/node',
+                token=user.session_token,
+            )
+        ):
             addresses = (
                 node.get('ipAddresses')
                 or node.get('ip_addresses')
@@ -73,29 +121,49 @@ def _load_scaletail_networks() -> list[ipaddress._BaseNetwork]:
         pass
 
     dedup = list(dict.fromkeys(networks))
-    _scaletail_network_cache["loaded_at"] = now
-    _scaletail_network_cache["networks"] = dedup
+    _scaletail_network_cache[cache_key] = {
+        "loaded_at": now,
+        "networks": dedup,
+    }
     return dedup
 
 
-def _is_scaletail_destination(value: Any) -> bool:
-    try:
-        ip = ipaddress.ip_address(str(value or "").strip())
-    except ValueError:
-        return False
-    return any(ip in network for network in _load_scaletail_networks())
+def _sample_window(observed_at: list[datetime] | None, hours: int, interval_seconds: int) -> dict:
+    """Calculate report completeness only inside continuous active sessions."""
+    samples = sorted(value for value in (observed_at or []) if isinstance(value, datetime))
+    total = len(samples)
+    if total == 0:
+        return {
+            'samples': 0,
+            'expected': 0,
+            'normal': 0,
+            'failed': 0,
+            'normal_percent': 0,
+            'samples_per_hour': 0,
+            'active_minutes': 0,
+            'sessions': 0,
+            'first_seen': '',
+            'last_seen': '',
+        }
 
-
-def _sample_window(total: int, first_seen: datetime | None, last_seen: datetime | None, hours: int, interval_seconds: int) -> dict:
-    if total <= 0:
-        expected = max(1, math.ceil(hours * 3600 / interval_seconds))
-    else:
-        now = datetime.now(first_seen.tzinfo) if first_seen and first_seen.tzinfo else datetime.now()
-        if first_seen:
-            seconds = max(interval_seconds, min(hours * 3600, (now - first_seen).total_seconds()))
+    # A long gap means the client was not using ScaleTail. Only short gaps
+    # inside an active session can represent missed reports.
+    session_gap_seconds = max(60, interval_seconds * 4)
+    expected = 1
+    active_seconds = float(interval_seconds)
+    sessions = 1
+    previous = samples[0]
+    for current in samples[1:]:
+        gap_seconds = max(0.0, (current - previous).total_seconds())
+        if gap_seconds > session_gap_seconds:
+            sessions += 1
+            expected += 1
+            active_seconds += interval_seconds
         else:
-            seconds = hours * 3600
-        expected = max(total, math.ceil(seconds / interval_seconds))
+            expected += max(1, math.ceil(gap_seconds / interval_seconds))
+            active_seconds += max(float(interval_seconds), gap_seconds)
+        previous = current
+
     failed = max(0, expected - total)
     return {
         'samples': total,
@@ -103,9 +171,11 @@ def _sample_window(total: int, first_seen: datetime | None, last_seen: datetime 
         'normal': total,
         'failed': failed,
         'normal_percent': round((total / expected) * 100, 1) if expected else 0,
-        'samples_per_hour': round(total / hours, 1),
-        'first_seen': first_seen.strftime('%Y-%m-%d %H:%M:%S') if first_seen else '',
-        'last_seen': last_seen.strftime('%Y-%m-%d %H:%M:%S') if last_seen else '',
+        'samples_per_hour': round(total / max(active_seconds / 3600, interval_seconds / 3600), 1),
+        'active_minutes': round(active_seconds / 60, 1),
+        'sessions': sessions,
+        'first_seen': samples[0].strftime('%Y-%m-%d %H:%M:%S'),
+        'last_seen': samples[-1].strftime('%Y-%m-%d %H:%M:%S'),
     }
 
 
@@ -167,6 +237,10 @@ def _run_traffic_maintenance(conn, force: bool = False) -> dict:
     deleted_samples = cur.rowcount
     cur.execute("DELETE FROM traffic_hourly WHERE bucket_start < NOW() - INTERVAL '180 days'")
     deleted_hourly = cur.rowcount
+    cur.execute("DELETE FROM traffic_daily WHERE bucket_date < CURRENT_DATE - INTERVAL '730 days'")
+    deleted_daily = cur.rowcount
+    cur.execute("DELETE FROM flow_summaries WHERE window_start < NOW() - INTERVAL '30 days'")
+    deleted_flows = cur.rowcount
 
     conn.commit()
     _last_maintenance_at = now
@@ -176,6 +250,8 @@ def _run_traffic_maintenance(conn, force: bool = False) -> dict:
         'daily_rows': daily_rows,
         'deleted_samples': deleted_samples,
         'deleted_hourly': deleted_hourly,
+        'deleted_daily': deleted_daily,
+        'deleted_flows': deleted_flows,
     }
 
 
@@ -186,28 +262,35 @@ def traffic_summary(user: CurrentUser = Depends(get_current_user)):
     try:
         _run_traffic_maintenance(conn)
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
+        sample_scope_sql, sample_scope_params = _account_scope(user, "ts")
+        cur.execute(f"""
             SELECT
-                COALESCE(SUM(rx_bytes_delta), 0) AS rx_bytes,
-                COALESCE(SUM(tx_bytes_delta), 0) AS tx_bytes,
-                COALESCE(MAX(rx_rate_bps), 0) AS peak_rx_rate_bps,
-                COALESCE(MAX(tx_rate_bps), 0) AS peak_tx_rate_bps,
-                COUNT(DISTINCT COALESCE(machine_id::text, machine_name)) AS machines
-            FROM traffic_samples
-            WHERE observed_at >= NOW() - INTERVAL '24 hours'
-        """)
+                COALESCE(SUM(ts.rx_bytes_delta), 0) AS rx_bytes,
+                COALESCE(SUM(ts.tx_bytes_delta), 0) AS tx_bytes,
+                COALESCE(MAX(ts.rx_rate_bps), 0) AS peak_rx_rate_bps,
+                COALESCE(MAX(ts.tx_rate_bps), 0) AS peak_tx_rate_bps,
+                COUNT(DISTINCT COALESCE(ts.machine_id::text, ts.machine_name)) AS machines
+            FROM traffic_samples ts
+            WHERE ts.observed_at >= NOW() - INTERVAL '24 hours'
+            {sample_scope_sql}
+        """, sample_scope_params)
         day = cur.fetchone()
 
-        cur.execute("""
+        cur.execute(f"""
             SELECT
-                COALESCE(SUM(rx_bytes_delta), 0) AS rx_bytes,
-                COALESCE(SUM(tx_bytes_delta), 0) AS tx_bytes
-            FROM traffic_samples
-            WHERE observed_at >= NOW() - INTERVAL '30 days'
-        """)
+                COALESCE(SUM(ts.rx_bytes_delta), 0) AS rx_bytes,
+                COALESCE(SUM(ts.tx_bytes_delta), 0) AS tx_bytes
+            FROM traffic_samples ts
+            WHERE ts.observed_at >= NOW() - INTERVAL '30 days'
+            {sample_scope_sql}
+        """, sample_scope_params)
         month = cur.fetchone()
 
-        cur.execute("SELECT COUNT(*) AS open_events FROM security_events WHERE status = 'open'")
+        event_scope_sql, event_scope_params = _account_scope(user, "se")
+        cur.execute(
+            f"SELECT COUNT(*) AS open_events FROM security_events se WHERE se.status = 'open' {event_scope_sql}",
+            event_scope_params,
+        )
         events = cur.fetchone()
 
         return {
@@ -244,21 +327,23 @@ def top_machines(days: int = 7, user: CurrentUser = Depends(get_current_user)):
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
+        scope_sql, scope_params = _account_scope(user, "ts")
+        cur.execute(f"""
             SELECT
-                machine_id,
-                COALESCE(machine_name, CONCAT('机器#', machine_id)) AS machine_name,
-                group_name,
-                COALESCE(SUM(rx_bytes_delta), 0) AS rx_bytes,
-                COALESCE(SUM(tx_bytes_delta), 0) AS tx_bytes,
-                COALESCE(MAX(rx_rate_bps), 0) AS peak_rx_rate_bps,
-                COALESCE(MAX(tx_rate_bps), 0) AS peak_tx_rate_bps
-            FROM traffic_samples
-            WHERE observed_at >= NOW() - (%s || ' days')::interval
-            GROUP BY machine_id, machine_name, group_name
-            ORDER BY (COALESCE(SUM(rx_bytes_delta), 0) + COALESCE(SUM(tx_bytes_delta), 0)) DESC
+                ts.machine_id,
+                COALESCE(ts.machine_name, CONCAT('机器#', ts.machine_id)) AS machine_name,
+                ts.group_name,
+                COALESCE(SUM(ts.rx_bytes_delta), 0) AS rx_bytes,
+                COALESCE(SUM(ts.tx_bytes_delta), 0) AS tx_bytes,
+                COALESCE(MAX(ts.rx_rate_bps), 0) AS peak_rx_rate_bps,
+                COALESCE(MAX(ts.tx_rate_bps), 0) AS peak_tx_rate_bps
+            FROM traffic_samples ts
+            WHERE ts.observed_at >= NOW() - (%s || ' days')::interval
+            {scope_sql}
+            GROUP BY ts.machine_id, ts.machine_name, ts.group_name
+            ORDER BY (COALESCE(SUM(ts.rx_bytes_delta), 0) + COALESCE(SUM(ts.tx_bytes_delta), 0)) DESC
             LIMIT 20
-        """, (days,))
+        """, [days, *scope_params])
         return {'code': 0, 'data': cur.fetchall()}
     finally:
         conn.close()
@@ -271,19 +356,21 @@ def top_groups(days: int = 7, user: CurrentUser = Depends(get_current_user)):
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
+        scope_sql, scope_params = _account_scope(user, "ts")
+        cur.execute(f"""
             SELECT
-                group_id,
-                COALESCE(group_name, CONCAT('分组#', group_id)) AS group_name,
-                COALESCE(SUM(rx_bytes_delta), 0) AS rx_bytes,
-                COALESCE(SUM(tx_bytes_delta), 0) AS tx_bytes,
-                COUNT(DISTINCT COALESCE(machine_id::text, machine_name)) AS machines
-            FROM traffic_samples
-            WHERE observed_at >= NOW() - (%s || ' days')::interval
-            GROUP BY group_id, group_name
-            ORDER BY (COALESCE(SUM(rx_bytes_delta), 0) + COALESCE(SUM(tx_bytes_delta), 0)) DESC
+                ts.group_id,
+                COALESCE(ts.group_name, CONCAT('分组#', ts.group_id)) AS group_name,
+                COALESCE(SUM(ts.rx_bytes_delta), 0) AS rx_bytes,
+                COALESCE(SUM(ts.tx_bytes_delta), 0) AS tx_bytes,
+                COUNT(DISTINCT COALESCE(ts.machine_id::text, ts.machine_name)) AS machines
+            FROM traffic_samples ts
+            WHERE ts.observed_at >= NOW() - (%s || ' days')::interval
+            {scope_sql}
+            GROUP BY ts.group_id, ts.group_name
+            ORDER BY (COALESCE(SUM(ts.rx_bytes_delta), 0) + COALESCE(SUM(ts.tx_bytes_delta), 0)) DESC
             LIMIT 20
-        """, (days,))
+        """, [days, *scope_params])
         return {'code': 0, 'data': cur.fetchall()}
     finally:
         conn.close()
@@ -302,25 +389,26 @@ def traffic_samples(
     where = []
     params = []
     if machine_id:
-        where.append("machine_id = %s")
+        where.append("ts.machine_id = %s")
         params.append(machine_id)
+    _append_account_scope(where, params, user, "ts")
     where_sql = "WHERE " + " AND ".join(where) if where else ""
     offset = (page - 1) * size
 
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(f"SELECT COUNT(*) AS count FROM traffic_samples {where_sql}", params)
+        cur.execute(f"SELECT COUNT(*) AS count FROM traffic_samples ts {where_sql}", params)
         total = cur.fetchone()['count']
         cur.execute(f"""
             SELECT
-                id, machine_id, machine_name, group_name,
-                rx_bytes_delta, tx_bytes_delta, rx_rate_bps, tx_rate_bps,
-                derp, endpoint_type,
-                TO_CHAR(observed_at, 'YYYY-MM-DD HH24:MI:SS') AS observed_at
-            FROM traffic_samples
+                ts.id, ts.machine_id, ts.machine_name, ts.group_name,
+                ts.rx_bytes_delta, ts.tx_bytes_delta, ts.rx_rate_bps, ts.tx_rate_bps,
+                ts.derp, ts.endpoint_type,
+                TO_CHAR(ts.observed_at, 'YYYY-MM-DD HH24:MI:SS') AS observed_at
+            FROM traffic_samples ts
             {where_sql}
-            ORDER BY observed_at DESC
+            ORDER BY ts.observed_at DESC
             LIMIT %s OFFSET %s
         """, [*params, size, offset])
         return {'code': 0, 'data': cur.fetchall(), 'total': total, 'page': page, 'size': size}
@@ -333,30 +421,30 @@ def sample_health(
     interval_seconds: int = 15,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """按机器聚合最近 24/12 小时采样频率。失败数为按客户端上报间隔估算的缺失采样数。"""
+    """按机器聚合最近 24/12 小时连续活跃时段的上报完整率。"""
     interval_seconds = max(5, min(interval_seconds, 3600))
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
+        scope_sql, scope_params = _account_scope(user, "ts")
+        cur.execute(f"""
             SELECT
-                machine_id,
-                COALESCE(machine_name, CONCAT('机器#', machine_id)) AS machine_name,
-                group_name,
-                COUNT(*) FILTER (WHERE observed_at >= NOW() - INTERVAL '24 hours') AS samples_24h,
-                MIN(observed_at) FILTER (WHERE observed_at >= NOW() - INTERVAL '24 hours') AS first_24h,
-                MAX(observed_at) FILTER (WHERE observed_at >= NOW() - INTERVAL '24 hours') AS last_24h,
-                COUNT(*) FILTER (WHERE observed_at >= NOW() - INTERVAL '12 hours') AS samples_12h,
-                MIN(observed_at) FILTER (WHERE observed_at >= NOW() - INTERVAL '12 hours') AS first_12h,
-                MAX(observed_at) FILTER (WHERE observed_at >= NOW() - INTERVAL '12 hours') AS last_12h,
-                MAX(observed_at) AS last_seen
-            FROM traffic_samples
-            WHERE observed_at >= NOW() - INTERVAL '24 hours'
-            GROUP BY machine_id, machine_name, group_name
-            ORDER BY COUNT(*) FILTER (WHERE observed_at >= NOW() - INTERVAL '24 hours') DESC,
-                     MAX(observed_at) DESC
+                ts.machine_id,
+                COALESCE(ts.machine_name, CONCAT('机器#', ts.machine_id)) AS machine_name,
+                ts.group_name,
+                ARRAY_AGG(ts.observed_at ORDER BY ts.observed_at)
+                    FILTER (WHERE ts.observed_at >= NOW() - INTERVAL '24 hours') AS samples_24h,
+                ARRAY_AGG(ts.observed_at ORDER BY ts.observed_at)
+                    FILTER (WHERE ts.observed_at >= NOW() - INTERVAL '12 hours') AS samples_12h,
+                MAX(ts.observed_at) AS last_seen
+            FROM traffic_samples ts
+            WHERE ts.observed_at >= NOW() - INTERVAL '24 hours'
+            {scope_sql}
+            GROUP BY ts.machine_id, ts.machine_name, ts.group_name
+            ORDER BY COUNT(*) FILTER (WHERE ts.observed_at >= NOW() - INTERVAL '24 hours') DESC,
+                     MAX(ts.observed_at) DESC
             LIMIT 50
-        """)
+        """, scope_params)
         rows = []
         for row in cur.fetchall():
             last_seen = row.get('last_seen')
@@ -367,16 +455,12 @@ def sample_health(
                 'last_seen': last_seen.strftime('%Y-%m-%d %H:%M:%S') if last_seen else '',
                 'windows': {
                     'h24': _sample_window(
-                        int(row.get('samples_24h') or 0),
-                        row.get('first_24h'),
-                        row.get('last_24h'),
+                        row.get('samples_24h'),
                         24,
                         interval_seconds,
                     ),
                     'h12': _sample_window(
-                        int(row.get('samples_12h') or 0),
-                        row.get('first_12h'),
-                        row.get('last_12h'),
+                        row.get('samples_12h'),
                         12,
                         interval_seconds,
                     ),
@@ -394,26 +478,34 @@ def top_destinations(days: int = 1, user: CurrentUser = Depends(get_current_user
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
+        scope_sql, scope_params = _account_scope(user, "fs")
+        network_cidrs = [str(network) for network in _load_scaletail_networks(user)]
+        cur.execute(f"""
             SELECT
-                dst_ip,
-                dst_port,
-                protocol,
-                process_name,
-                COALESCE(SUM(bytes), 0) AS bytes,
-                COALESCE(SUM(packets), 0) AS packets,
-                COALESCE(SUM(connection_count), 0) AS connection_count,
-                COUNT(DISTINCT COALESCE(machine_id::text, machine_name)) AS machines,
-                TO_CHAR(MAX(window_start), 'YYYY-MM-DD HH24:MI:SS') AS last_seen
-            FROM flow_summaries
-            WHERE window_start >= NOW() - (%s || ' days')::interval
-              AND dst_ip IS NOT NULL
-              AND dst_ip <> ''
-            GROUP BY dst_ip, dst_port, protocol, process_name
-            ORDER BY COALESCE(SUM(connection_count), 0) DESC, COALESCE(SUM(packets), 0) DESC
-        """, (days,))
-        rows = [row for row in cur.fetchall() if _is_scaletail_destination(row.get('dst_ip'))]
-        return {'code': 0, 'data': rows[:20]}
+                fs.dst_ip,
+                fs.dst_port,
+                fs.protocol,
+                fs.process_name,
+                COALESCE(SUM(fs.bytes), 0) AS bytes,
+                COALESCE(SUM(fs.packets), 0) AS packets,
+                COALESCE(SUM(fs.connection_count), 0) AS connection_count,
+                COUNT(DISTINCT COALESCE(fs.machine_id::text, fs.machine_name)) AS machines,
+                TO_CHAR(MAX(fs.window_start), 'YYYY-MM-DD HH24:MI:SS') AS last_seen
+            FROM flow_summaries fs
+            WHERE fs.window_start >= NOW() - (%s || ' days')::interval
+              AND fs.dst_ip IS NOT NULL
+              AND fs.dst_ip <> ''
+              AND CASE
+                    WHEN pg_input_is_valid(fs.dst_ip, 'inet')
+                    THEN fs.dst_ip::inet <<= ANY(%s::cidr[])
+                    ELSE FALSE
+                  END
+              {scope_sql}
+            GROUP BY fs.dst_ip, fs.dst_port, fs.protocol, fs.process_name
+            ORDER BY COALESCE(SUM(fs.connection_count), 0) DESC, COALESCE(SUM(fs.packets), 0) DESC
+            LIMIT 20
+        """, [days, network_cidrs, *scope_params])
+        return {'code': 0, 'data': cur.fetchall()}
     finally:
         conn.close()
 
@@ -432,29 +524,30 @@ def traffic_flows(
     where = []
     params = []
     if machine_id:
-        where.append("machine_id = %s")
+        where.append("fs.machine_id = %s")
         params.append(machine_id)
     if dst_ip:
-        where.append("dst_ip = %s")
+        where.append("fs.dst_ip = %s")
         params.append(dst_ip)
+    _append_account_scope(where, params, user, "fs")
     where_sql = "WHERE " + " AND ".join(where) if where else ""
     offset = (page - 1) * size
 
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(f"SELECT COUNT(*) AS count FROM flow_summaries {where_sql}", params)
+        cur.execute(f"SELECT COUNT(*) AS count FROM flow_summaries fs {where_sql}", params)
         total = cur.fetchone()['count']
         cur.execute(f"""
             SELECT
-                id, machine_id, machine_name, group_name,
-                dst_ip, dst_port, protocol, direction, bytes, packets,
-                connection_count, state, process_id, process_name,
-                TO_CHAR(window_start, 'YYYY-MM-DD HH24:MI:SS') AS window_start,
-                window_seconds
-            FROM flow_summaries
+                fs.id, fs.machine_id, fs.machine_name, fs.group_name,
+                fs.dst_ip, fs.dst_port, fs.protocol, fs.direction, fs.bytes, fs.packets,
+                fs.connection_count, fs.state, fs.process_id, fs.process_name,
+                TO_CHAR(fs.window_start, 'YYYY-MM-DD HH24:MI:SS') AS window_start,
+                fs.window_seconds
+            FROM flow_summaries fs
             {where_sql}
-            ORDER BY window_start DESC, id DESC
+            ORDER BY fs.window_start DESC, fs.id DESC
             LIMIT %s OFFSET %s
         """, [*params, size, offset])
         return {'code': 0, 'data': cur.fetchall(), 'total': total, 'page': page, 'size': size}

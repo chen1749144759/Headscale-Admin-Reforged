@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from .dependencies import CurrentUser, get_current_user, require_manager, get_db_conn, record_log
+from .dependencies import CurrentUser, get_current_user, get_db_conn, record_log, require_manager
 from .utils import hs_request
 
 router = APIRouter(prefix="/api/routes", tags=["路由"])
@@ -17,7 +17,9 @@ router = APIRouter(prefix="/api/routes", tags=["路由"])
 @router.get('')
 def list_routes(user: CurrentUser = Depends(get_current_user)):
     """获取所有节点的路由信息（从节点列表中提取）"""
-    result = hs_request('GET', '/api/v1/node')
+    if not user.is_manager() and user.network_user_id is None:
+        return {'code': 0, 'data': []}
+    result = hs_request('GET', '/api/v1/node', token=user.session_token)
     nodes = []
     if isinstance(result, dict):
         # hs_request 返回 {'code': 0, 'data': {'nodes': [...]}}
@@ -29,6 +31,9 @@ def list_routes(user: CurrentUser = Depends(get_current_user)):
 
     route_list = []
     for node in nodes:
+        node_user_id = (node.get('user') or {}).get('id')
+        if not user.is_manager() and str(node_user_id or '') != str(user.network_user_id or ''):
+            continue
         node_id = node.get('id')
         node_name = node.get('givenName') or node.get('name') or str(node_id)
         user_info = node.get('user', {})
@@ -59,13 +64,22 @@ class ApproveRoutesReq(BaseModel):
 
 
 @router.post('/node/{node_id}/approve')
-def approve_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depends(get_current_user)):
+def approve_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depends(require_manager)):
     """批准指定节点的路由"""
-    result = hs_request('POST', f'/api/v1/node/{node_id}/approve_routes', {'routes': req.routes})
+    result = hs_request(
+        'POST',
+        f'/api/v1/node/{node_id}/approve_routes',
+        {'routes': req.routes},
+        token=user.session_token,
+    )
     # 查询节点名称用于日志
     node_name = str(node_id)
     try:
-        nr = hs_request('GET', f'/api/v1/node/{node_id}')
+        nr = hs_request(
+            'GET',
+            f'/api/v1/node/{node_id}',
+            token=user.session_token,
+        )
         nd = nr.get('data', nr) if isinstance(nr, dict) else {}
         nd = nd.get('node', nd) if isinstance(nd, dict) else {}
         node_name = nd.get('givenName') or nd.get('name') or str(node_id)
@@ -81,11 +95,16 @@ def approve_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depe
 
 
 @router.post('/node/{node_id}/revoke')
-def revoke_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depends(get_current_user)):
+def revoke_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depends(require_manager)):
     """撤销指定节点的某些路由（保留其余已批准路由）"""
     # 先获取当前节点已批准路由
-    node_result = hs_request('GET', f'/api/v1/node/{node_id}')
-    node_data = node_result.get('node', node_result) if isinstance(node_result, dict) else {}
+    node_result = hs_request(
+        'GET',
+        f'/api/v1/node/{node_id}',
+        token=user.session_token,
+    )
+    node_data = node_result.get('data', {}) if isinstance(node_result, dict) else {}
+    node_data = node_data.get('node', node_data) if isinstance(node_data, dict) else {}
     current_approved = set(node_data.get('approvedRoutes') or node_data.get('approved_routes') or [])
 
     # 移除要撤销的路由
@@ -95,7 +114,12 @@ def revoke_routes(node_id: int, req: ApproveRoutesReq, user: CurrentUser = Depen
     # 获取节点名称用于日志
     node_name = node_data.get('givenName') or node_data.get('name') or str(node_id)
 
-    result = hs_request('POST', f'/api/v1/node/{node_id}/approve_routes', {'routes': new_approved})
+    result = hs_request(
+        'POST',
+        f'/api/v1/node/{node_id}/approve_routes',
+        {'routes': new_approved},
+        token=user.session_token,
+    )
     conn = get_db_conn()
     try:
         record_log(conn, user.id, f'撤销 {node_name} 宣告路由: {", ".join(req.routes)}')

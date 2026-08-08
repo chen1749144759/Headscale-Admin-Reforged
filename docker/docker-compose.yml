@@ -1,158 +1,208 @@
-# ScaleForge - Docker Compose 一键部署
-# 启动: docker compose up -d
-# 停止: docker compose down
-#
-# 国内用户无法访问 Docker Hub 时，在 .env 中设置:
-#   REGISTRY_MIRROR=docker.1ms.run/
-# 即可自动走镜像加速，无需修改本文件。
+x-backend-environment: &backend-environment
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: ${POSTGRES_DB:-headscale_admin}
+  DB_USER: ${SCALEFORGE_DB_USER:-scaleforge_runtime}
+  DB_PASS: ${SCALEFORGE_DB_PASSWORD:?Set SCALEFORGE_DB_PASSWORD in docker/.env}
+  HEADSCALE_PUBLIC_URL: ${HEADSCALE_SERVER_URL:?Set HEADSCALE_SERVER_URL in docker/.env}
+  TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+  ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
+  IP_GEOLOOKUP_URL: ${IP_GEOLOOKUP_URL:-}
+  CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-true}
+  CAPTCHA_API_ENDPOINT: ${CAPTCHA_API_ENDPOINT:-}
+  CAPTCHA_SITEVERIFY_URL: ${CAPTCHA_SITEVERIFY_URL:-}
+  CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+  SCALEFORGE_INTERNAL_AUTH_KEY_FILE: /run/secrets/scaleforge_internal_auth_key
 
 services:
-  # ==================== PostgreSQL 数据库 ====================
   postgres:
     image: ${REGISTRY_MIRROR:-}postgres:16-alpine
-    container_name: hs-postgres
+    container_name: scaleforge-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-headscale_admin}
       POSTGRES_USER: ${POSTGRES_USER:-headscale_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-HsAdmin2026PG}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/.env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    networks:
-      - hs-net
+    networks: [scaleforge-net]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-headscale_admin}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-headscale_admin} -d ${POSTGRES_DB:-headscale_admin}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
-  # ==================== Headscale 控制服务器 (AE) ====================
-  headscale:
-    image: ${REGISTRY_MIRROR:-}chenzeshi/headscale-admin-ae:${AE_VERSION:-latest}
-    container_name: hs-headscale
-    restart: unless-stopped
-    volumes:
-      - headscale-data:/var/lib/headscale
-      - derper-certs:/etc/headscale/derp-certs
-      - ./config.yaml.tmpl:/etc/headscale/config.yaml.tmpl:ro
-      - ./derp.yaml.tmpl:/etc/headscale/derp.yaml.tmpl:ro
-      - ./entrypoint.sh:/entrypoint.sh:ro
-    ports:
-      - "${HS_PORT:-8080}:8080"          # HTTP API + Noise 协议
+  db-bootstrap:
+    image: ${REGISTRY_MIRROR:-}postgres:16-alpine
+    container_name: scaleforge-db-bootstrap
+    restart: "no"
     environment:
-      - HEADSCALE_SERVER_URL=${HEADSCALE_SERVER_URL:-http://127.0.0.1:8080}
-      - HEADSCALE_DNS_DOMAIN=${HEADSCALE_DNS_DOMAIN:-hs.admin.pro}
-      - HEADSCALE_MAGIC_DNS=${HEADSCALE_MAGIC_DNS:-true}
-      - HEADSCALE_DNS_OVERRIDE_LOCAL=${HEADSCALE_DNS_OVERRIDE_LOCAL:-true}
-      - HEADSCALE_DNS_GLOBAL=${HEADSCALE_DNS_GLOBAL:-1.1.1.1,8.8.8.8}
-      - HEADSCALE_DNS_SEARCH_DOMAINS=${HEADSCALE_DNS_SEARCH_DOMAINS:-}
-      - HEADSCALE_CONFIG_OUT=/var/lib/headscale/config.yaml
-      - HEADSCALE_LOG_LEVEL=${HEADSCALE_LOG_LEVEL:-info}
-      - DERP_DOMAIN=${DERP_DOMAIN:-}
-      - DERP_STUN_PORT=${DERP_STUN_PORT:-3478}
-      - DERP_HTTP_PORT=${DERP_HTTP_PORT:-3479}
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${POSTGRES_DB:-headscale_admin}
-      - DB_USER=${POSTGRES_USER:-headscale_admin}
-      - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin2026PG}
-    entrypoint: ["/bin/sh", "/entrypoint.sh"]
-    networks:
-      - hs-net
+      POSTGRES_DB: ${POSTGRES_DB:-headscale_admin}
+      POSTGRES_USER: ${POSTGRES_USER:-headscale_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/.env}
+      HEADSCALE_DB_USER: ${HEADSCALE_DB_USER:-headscale_runtime}
+      HEADSCALE_DB_PASSWORD: ${HEADSCALE_DB_PASSWORD:?Set HEADSCALE_DB_PASSWORD in docker/.env}
+      SCALEFORGE_DB_USER: ${SCALEFORGE_DB_USER:-scaleforge_runtime}
+      SCALEFORGE_DB_PASSWORD: ${SCALEFORGE_DB_PASSWORD:?Set SCALEFORGE_DB_PASSWORD in docker/.env}
+      SCALEFORGE_DB_OWNER: ${SCALEFORGE_DB_OWNER:-scaleforge_owner}
+    volumes:
+      - ./postgres/bootstrap.sh:/usr/local/bin/bootstrap.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/bootstrap.sh"]
+    networks: [scaleforge-net]
     depends_on:
       postgres:
         condition: service_healthy
+
+  headscale:
+    image: ${REGISTRY_MIRROR:-}chenzeshi/headscale-admin-ae:${AE_VERSION:-latest}
+    container_name: scaleforge-headscale
+    restart: unless-stopped
+    volumes:
+      - headscale-data:/var/lib/headscale
+      - headscale-config:/var/lib/headscale-config
+      - headscale-cli-socket:/var/run/headscale
+      - scaleforge-control-socket:/var/run/scaleforge/control
+      - scaleforge-client-socket:/var/run/scaleforge/client
+    secrets:
+      - scaleforge_bootstrap_password
+      - scaleforge_internal_auth_key
+    ports:
+      - "${HS_BIND_IP:-127.0.0.1}:${HS_PORT:-8080}:8080/tcp"
+      - "${DERP_BIND_IP:-0.0.0.0}:${DERP_STUN_PORT:-3478}:3478/udp"
+    environment:
+      HEADSCALE_SERVER_URL: ${HEADSCALE_SERVER_URL:?Set the trusted HTTPS control URL in docker/.env}
+      HEADSCALE_DNS_DOMAIN: ${HEADSCALE_DNS_DOMAIN:-hs.admin.pro}
+      HEADSCALE_MAGIC_DNS: ${HEADSCALE_MAGIC_DNS:-true}
+      HEADSCALE_DNS_OVERRIDE_LOCAL: ${HEADSCALE_DNS_OVERRIDE_LOCAL:-true}
+      HEADSCALE_DNS_GLOBAL: ${HEADSCALE_DNS_GLOBAL:-1.1.1.1,8.8.8.8}
+      HEADSCALE_DNS_SEARCH_DOMAINS: ${HEADSCALE_DNS_SEARCH_DOMAINS:-}
+      HEADSCALE_CONFIG_OUT: /var/lib/headscale-config/config.yaml
+      HEADSCALE_LOG_LEVEL: ${HEADSCALE_LOG_LEVEL:-info}
+      HEADSCALE_TRUST_PROXY: ${HEADSCALE_TRUST_PROXY:-true}
+      HEADSCALE_TRUSTED_PROXY_CIDRS: ${HEADSCALE_TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
+      DERP_DOMAIN: ${DERP_DOMAIN:?Set DERP_DOMAIN in docker/.env}
+      SCALEFORGE_BOOTSTRAP_USERNAME: ${SCALEFORGE_BOOTSTRAP_USERNAME:-admin}
+      SCALEFORGE_MAX_NODES_PER_ACCOUNT: ${SCALEFORGE_MAX_NODES_PER_ACCOUNT:-20}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-headscale_admin}
+      DB_USER: ${HEADSCALE_DB_USER:-headscale_runtime}
+      DB_PASS: ${HEADSCALE_DB_PASSWORD:?Set HEADSCALE_DB_PASSWORD in docker/.env}
+    group_add: ["10101"]
+    networks: [scaleforge-net]
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 15s
+      retries: 15
+      start_period: 20s
 
-  # ==================== DERP 中继服务器（独立部署） ====================
-  derper:
-    image: ${REGISTRY_MIRROR:-}fredliang/derper:latest
-    container_name: hs-derper
-    restart: unless-stopped
-    ports:
-      - "${DERP_STUN_PORT:-3478}:${DERP_STUN_PORT:-3478}/udp"   # STUN (UDP)
-      - "${DERP_HTTP_PORT:-3479}:${DERP_HTTP_PORT:-3479}/tcp"    # DERP relay (TCP, TLS + 自签证书)
-    volumes:
-      - derper-certs:/app/certs:ro
-    entrypoint:
-      - /app/derper
-      - --hostname=${DERP_DOMAIN:-127.0.0.1}
-      - -a=:${DERP_HTTP_PORT:-3479}
-      - --http-port=-1
-      - --certmode=manual
-      - --certdir=/app/certs
-      - --stun-port=${DERP_STUN_PORT:-3478}
-      - --verify-clients=true
-    networks:
-      - hs-net
-    depends_on:
-      headscale:
-        condition: service_started
-
-  # ==================== 管理面板后端 (FastAPI) ====================
-  admin-backend:
+  scaleforge-migrate:
     image: ${REGISTRY_MIRROR:-}chenzeshi/scaleforge-backend:${BACKEND_VERSION:-latest}
-    container_name: hs-admin-backend
-    restart: unless-stopped
+    container_name: scaleforge-migrate
+    restart: "no"
+    command: ["python", "-m", "api.migrate"]
     environment:
-      - HEADSCALE_URL=http://headscale:8080
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${POSTGRES_DB:-headscale_admin}
-      - DB_USER=${POSTGRES_USER:-headscale_admin}
-      - DB_PASS=${POSTGRES_PASSWORD:-HsAdmin2026PG}
-      - SECRET_KEY=${SECRET_KEY:-headscale-admin-secret-2026}
-      - SCALETAIL_CLIENT_TOKEN=${SCALETAIL_CLIENT_TOKEN:-}
-      - IP_GEOLOOKUP_URL=${IP_GEOLOOKUP_URL:-}
-      - CAPTCHA_ENABLED=${CAPTCHA_ENABLED:-true}
-      - CAPTCHA_WIDGET_SRC=${CAPTCHA_WIDGET_SRC:-https://cdn.jsdelivr.net/npm/cap-widget}
-      - CAPTCHA_API_ENDPOINT=${CAPTCHA_API_ENDPOINT:-http://10.2.1.100:30030/62f60ca190/}
-      - CAPTCHA_SITEVERIFY_URL=${CAPTCHA_SITEVERIFY_URL:-}
-      - CAPTCHA_SECRET_KEY=${CAPTCHA_SECRET_KEY:-}
-      - API_KEY_FILE=/data/headscale/api.key
-      - HEADSCALE_CONFIG_PATH=/data/headscale/config.yaml
-      - HEADSCALE_DNS_DOMAIN=${HEADSCALE_DNS_DOMAIN:-hs.admin.pro}
-      - HEADSCALE_MAGIC_DNS=${HEADSCALE_MAGIC_DNS:-true}
-      - HEADSCALE_DNS_OVERRIDE_LOCAL=${HEADSCALE_DNS_OVERRIDE_LOCAL:-true}
-      - HEADSCALE_DNS_GLOBAL=${HEADSCALE_DNS_GLOBAL:-1.1.1.1,8.8.8.8}
-      - HEADSCALE_DNS_SEARCH_DOMAINS=${HEADSCALE_DNS_SEARCH_DOMAINS:-}
-    volumes:
-      - headscale-data:/data/headscale
-    networks:
-      - hs-net
+      MIGRATION_DB_HOST: postgres
+      MIGRATION_DB_PORT: "5432"
+      MIGRATION_DB_NAME: ${POSTGRES_DB:-headscale_admin}
+      MIGRATION_DB_USER: ${POSTGRES_USER:-headscale_admin}
+      MIGRATION_DB_PASS: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/.env}
+      SCALEFORGE_DB_USER: ${SCALEFORGE_DB_USER:-scaleforge_runtime}
+      SCALEFORGE_DB_OWNER: ${SCALEFORGE_DB_OWNER:-scaleforge_owner}
+      HEADSCALE_DB_USER: ${HEADSCALE_DB_USER:-headscale_runtime}
+      SCALEFORGE_MIGRATION_LOCK_TIMEOUT_MS: ${SCALEFORGE_MIGRATION_LOCK_TIMEOUT_MS:-15000}
+      SCALEFORGE_MIGRATION_STATEMENT_TIMEOUT_MS: ${SCALEFORGE_MIGRATION_STATEMENT_TIMEOUT_MS:-300000}
+    networks: [scaleforge-net]
     depends_on:
       headscale:
         condition: service_healthy
+
+  admin-backend-public:
+    image: ${REGISTRY_MIRROR:-}chenzeshi/scaleforge-backend:${BACKEND_VERSION:-latest}
+    container_name: scaleforge-backend-public
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+      SCALEFORGE_APP: api.main:app
+      SCALEFORGE_SOCKET: /var/run/scaleforge/public/api.sock
+      SCALEFORGE_TRUST_PROXY: "true"
+      HEADSCALE_SOCKET: /var/run/scaleforge/control/api.sock
+    volumes:
+      - scaleforge-control-socket:/var/run/scaleforge/control:ro
+      - scaleforge-public-socket:/var/run/scaleforge/public
+    secrets:
+      - scaleforge_internal_auth_key
+    networks: [scaleforge-net]
+    depends_on:
+      scaleforge-migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5175/api/health"]
+      test: ["CMD", "curl", "-sf", "--unix-socket", "/var/run/scaleforge/public/api.sock", "http://localhost/api/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
 
-  # ==================== Nginx 前端 + 反向代理 ====================
+  admin-backend-client:
+    image: ${REGISTRY_MIRROR:-}chenzeshi/scaleforge-backend:${BACKEND_VERSION:-latest}
+    container_name: scaleforge-backend-client
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+      SCALEFORGE_APP: api.internal_main:app
+      SCALEFORGE_SOCKET: /var/run/scaleforge/client/api.sock
+      SCALEFORGE_TRUST_PROXY: "false"
+    volumes:
+      - scaleforge-client-socket:/var/run/scaleforge/client
+    secrets:
+      - scaleforge_internal_auth_key
+    networks: [scaleforge-net]
+    depends_on:
+      scaleforge-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "--unix-socket", "/var/run/scaleforge/client/api.sock", "http://localhost/internal/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   nginx:
     image: ${REGISTRY_MIRROR:-}chenzeshi/scaleforge-nginx:${NGINX_VERSION:-latest}
-    container_name: hs-nginx
+    container_name: scaleforge-nginx
     restart: unless-stopped
+    environment:
+      SCALEFORGE_EXTERNAL_SCHEME: ${SCALEFORGE_EXTERNAL_SCHEME:-https}
     ports:
-      - "${WEB_PORT:-80}:80"
-    networks:
-      - hs-net
+      - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-80}:80"
+    group_add: ["10101"]
+    volumes:
+      - scaleforge-public-socket:/var/run/scaleforge/public:ro
+    networks: [scaleforge-net]
     depends_on:
-      admin-backend:
+      admin-backend-public:
         condition: service_healthy
 
 volumes:
   postgres-data:
   headscale-data:
-  derper-certs:
+  headscale-config:
+  headscale-cli-socket:
+  scaleforge-control-socket:
+  scaleforge-client-socket:
+  scaleforge-public-socket:
+
+secrets:
+  scaleforge_bootstrap_password:
+    file: ./secrets/scaleforge_bootstrap_password
+  scaleforge_internal_auth_key:
+    file: ./secrets/scaleforge_internal_auth_key
 
 networks:
-  hs-net:
+  scaleforge-net:
     driver: bridge

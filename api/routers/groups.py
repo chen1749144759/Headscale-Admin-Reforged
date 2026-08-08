@@ -13,13 +13,12 @@ router = APIRouter(prefix="/api/groups", tags=["分组"])
 
 class CreateHsUserReq(BaseModel):
     name: str
-    node_count: int = 2  # 机器配额，默认2
 
 
 @router.get('')
 def list_hs_users(user: CurrentUser = Depends(require_manager)):
     """获取 headscale 用户(分组)列表"""
-    result = hs_request('GET', '/api/v1/user')
+    result = hs_request('GET', '/api/v1/user', token=user.session_token)
     if result.get('code') != 0:
         return result
 
@@ -44,15 +43,16 @@ def create_hs_user(req: CreateHsUserReq, user: CurrentUser = Depends(require_man
     if not name:
         raise HTTPException(400, '分组名称不能为空')
 
-    result = hs_request('POST', '/api/v1/user', {'name': name})
+    result = hs_request(
+        'POST',
+        '/api/v1/user',
+        {'name': name},
+        token=user.session_token,
+    )
 
     conn = get_db_conn()
     try:
-        # 设置机器配额
-        if req.node_count and req.node_count > 0:
-            cur = conn.cursor()
-            cur.execute("UPDATE users SET node = %s WHERE name = %s", (req.node_count, name))
-        record_log(conn, user.id, f'创建 headscale 分组: {name} (配额: {req.node_count})')
+        record_log(conn, user.id, f'创建 Headscale 网络分组: {name}')
         conn.commit()
     finally:
         conn.close()
@@ -68,14 +68,18 @@ def delete_hs_user(uid: int, user: CurrentUser = Depends(require_manager)):
     # 先查分组名再删除
     group_name = str(uid)
     try:
-        r = hs_request('GET', '/api/v1/user')
+        r = hs_request('GET', '/api/v1/user', token=user.session_token)
         for u in (r.get('data', {}).get('users', []) if isinstance(r.get('data'), dict) else []):
             if str(u.get('id')) == str(uid):
                 group_name = u.get('name', str(uid))
                 break
     except Exception:
         pass
-    result = hs_request('DELETE', f'/api/v1/user/{uid}')
+    result = hs_request(
+        'DELETE',
+        f'/api/v1/user/{uid}',
+        token=user.session_token,
+    )
 
     conn = get_db_conn()
     try:

@@ -165,7 +165,7 @@
           <span class="panel-eyebrow">Sampling Frequency</span>
           <h3>采样频率</h3>
         </div>
-        <el-tag type="warning" effect="plain">按 15 秒上报间隔估算缺失</el-tag>
+        <el-tag type="warning" effect="plain">仅统计连续活跃时段，离线不计缺失</el-tag>
       </div>
 
       <div v-loading="sampleLoading" class="sample-grid">
@@ -181,26 +181,28 @@
           <div class="sample-window">
             <div class="window-title">
               <span>最近24小时</span>
-              <b>{{ formatPercent(windowInfo(row, 'h24').normal_percent) }}</b>
+              <b>{{ formatHealth(windowInfo(row, 'h24')) }}</b>
             </div>
             <el-progress :percentage="safePercent(windowInfo(row, 'h24').normal_percent)" :stroke-width="8" :show-text="false" />
             <div class="sample-metrics">
-              <span>正常 {{ windowInfo(row, 'h24').normal }}</span>
-              <span>缺失 {{ windowInfo(row, 'h24').failed }}</span>
-              <span>{{ windowInfo(row, 'h24').samples_per_hour }}/小时</span>
+              <span>收到 {{ windowInfo(row, 'h24').normal }}</span>
+              <span>短时缺失 {{ windowInfo(row, 'h24').failed }}</span>
+              <span>{{ windowInfo(row, 'h24').samples_per_hour }}/活跃小时</span>
+              <span>活跃 {{ windowInfo(row, 'h24').active_minutes }} 分钟</span>
             </div>
           </div>
 
           <div class="sample-window compact">
             <div class="window-title">
               <span>最近12小时</span>
-              <b>{{ formatPercent(windowInfo(row, 'h12').normal_percent) }}</b>
+              <b>{{ formatHealth(windowInfo(row, 'h12')) }}</b>
             </div>
             <el-progress :percentage="safePercent(windowInfo(row, 'h12').normal_percent)" :stroke-width="8" :show-text="false" status="success" />
             <div class="sample-metrics">
-              <span>正常 {{ windowInfo(row, 'h12').normal }}</span>
-              <span>缺失 {{ windowInfo(row, 'h12').failed }}</span>
-              <span>{{ windowInfo(row, 'h12').samples_per_hour }}/小时</span>
+              <span>收到 {{ windowInfo(row, 'h12').normal }}</span>
+              <span>短时缺失 {{ windowInfo(row, 'h12').failed }}</span>
+              <span>{{ windowInfo(row, 'h12').samples_per_hour }}/活跃小时</span>
+              <span>活跃 {{ windowInfo(row, 'h12').active_minutes }} 分钟</span>
             </div>
           </div>
         </article>
@@ -337,6 +339,10 @@ function formatPercent(value) {
   return `${safePercent(value).toFixed(safePercent(value) >= 99 ? 0 : 1)}%`
 }
 
+function formatHealth(info) {
+  return toNumber(info?.samples) > 0 ? formatPercent(info.normal_percent) : '无活跃采样'
+}
+
 function windowInfo(row, key) {
   return row?.windows?.[key] || {
     samples: 0,
@@ -345,6 +351,7 @@ function windowInfo(row, key) {
     failed: 0,
     normal_percent: 0,
     samples_per_hour: 0,
+    active_minutes: 0,
   }
 }
 

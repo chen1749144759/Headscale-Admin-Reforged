@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>控制台</h2><p>系统运行状态总览</p></div>
+    <div class="page-header"><h2>控制台</h2><p>{{ userStore.isManager ? '系统运行状态总览' : '我的 ScaleTail 网络概览' }}</p></div>
 
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-row">
@@ -17,7 +17,7 @@
 
     <!-- 第二行：Headscale信息 + 快捷操作  (等高) -->
     <el-row :gutter="16" style="margin-top:16px" class="info-row">
-      <el-col :xs="24" :sm="14">
+      <el-col v-if="userStore.isManager" :xs="24" :sm="14">
         <div class="glass-card content-card equal-card hs-status-card">
           <!-- 标题行 -->
           <div class="hs-header">
@@ -125,7 +125,7 @@
         </div>
       </el-col>
 
-      <el-col :xs="24" :sm="10">
+      <el-col :xs="24" :sm="userStore.isManager ? 10 : 24">
         <div class="glass-card content-card equal-card">
           <div class="section-title">快捷操作</div>
           <div class="quick-actions">
@@ -163,15 +163,15 @@ import { ref, computed, onMounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useTrafficStore, startTrafficSampling, MAX_TRAFFIC_SAMPLES } from '@/stores/traffic'
-import { getSystemInfo, getNodes, getUsers, getLogs } from '@/api'
-import { Monitor, Cpu, Connection, UserFilled, Key, Setting, Guide, SetUp } from '@element-plus/icons-vue'
+import { getSystemInfo, getNodes, getHsUsers, getLogs, getTrafficSummary } from '@/api'
+import { Monitor, Cpu, Connection, UserFilled, Setting, Guide, SetUp, Download, Upload } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const traffic = useTrafficStore()
 
-// 启动全局流量采样（幂等，只会启动一次，页面切走采样不停）
-startTrafficSampling()
+// 宿主机网卡采样属于管理员视角，普通账户只读取自身网络的聚合流量。
+if (userStore.isManager) startTrafficSampling()
 
 const sysInfo = ref({ cpu: 0, memory: 0, memoryUsed: 0, memoryTotal: 0 })
 const internalIps = ref([])
@@ -179,6 +179,7 @@ const nodeCount = ref(0)
 const onlineCount = ref(0)
 const userCount = ref(0)
 const recentLogs = ref([])
+const trafficSummary = ref({ today_rx_bytes: 0, today_tx_bytes: 0 })
 
 // 迷你流量图配置
 const MAX_SAMPLES = MAX_TRAFFIC_SAMPLES
@@ -224,20 +225,31 @@ const hsVersion = computed(() => {
 })
 const serverUrl = computed(() => userStore.systemStatus.server_url || '')
 
-const statCards = computed(() => [
-  { label: '在线机器', value: onlineCount.value, icon: markRaw(Connection), color: '#10b981' },
-  { label: '总机器数', value: nodeCount.value, icon: markRaw(Monitor), color: '#4f46e5' },
-  { label: '分组数', value: userCount.value, icon: markRaw(UserFilled), color: '#f59e0b' },
-  { label: 'CPU 使用率', value: sysInfo.value.cpu + '%', icon: markRaw(Cpu), color: '#06b6d4' },
-])
+const statCards = computed(() => {
+  const cards = [
+    { label: '在线机器', value: onlineCount.value, icon: markRaw(Connection), color: '#10b981' },
+    { label: '总机器数', value: nodeCount.value, icon: markRaw(Monitor), color: '#4f46e5' },
+  ]
+  if (userStore.isManager) {
+    cards.push(
+      { label: '分组数', value: userCount.value, icon: markRaw(UserFilled), color: '#f59e0b' },
+      { label: 'CPU 使用率', value: sysInfo.value.cpu + '%', icon: markRaw(Cpu), color: '#06b6d4' },
+    )
+  } else {
+    cards.push(
+      { label: '今日接收', value: formatBytes(trafficSummary.value.today_rx_bytes), icon: markRaw(Download), color: '#0ea5e9' },
+      { label: '今日发送', value: formatBytes(trafficSummary.value.today_tx_bytes), icon: markRaw(Upload), color: '#14b8a6' },
+    )
+  }
+  return cards
+})
 
-const quickActions = [
+const quickActions = computed(() => [
   { label: '用户管理', desc: '查看和管理网络机器', path: '/users', icon: markRaw(Connection), color: 'rgba(79,70,229,.12)' },
-  { label: '预认证密钥', desc: '创建设备注册密钥', path: '/preauthkeys', icon: markRaw(Key), color: 'rgba(16,185,129,.12)' },
   { label: '路由管理', desc: '管理子网路由通告', path: '/routes', icon: markRaw(Guide), color: 'rgba(6,182,212,.12)' },
   { label: '系统设置', desc: '配置 Headscale 连接', path: '/settings', icon: markRaw(Setting), color: 'rgba(245,158,11,.12)' },
   { label: 'DNS 配置', desc: '配置 MagicDNS 和下发 DNS', path: '/settings/dns', icon: markRaw(SetUp), color: 'rgba(59,130,246,.12)' },
-]
+].filter(item => userStore.isManager || !item.path.startsWith('/settings')))
 
 function progressColor(v) {
   if (v > 80) return '#ef4444'
@@ -255,18 +267,22 @@ function formatBytes(b) {
 }
 
 onMounted(async () => {
-  // 系统信息（CPU/内存/内网IP）
-  try {
-    const res = await getSystemInfo()
-    const d = res.data || {}
-    sysInfo.value.cpu = Math.round(d.cpu_usage ?? d.cpu ?? 0)
-    sysInfo.value.memory = Math.round(d.memory_percent ?? d.memory ?? 0)
-    sysInfo.value.memoryUsed = d.memory_used ?? 0
-    sysInfo.value.memoryTotal = d.memory_total ?? 0
-    if (Array.isArray(d.internal_ips)) {
-      internalIps.value = d.internal_ips
-    }
-  } catch {}
+  if (userStore.isManager) {
+    try {
+      const res = await getSystemInfo()
+      const d = res.data || {}
+      sysInfo.value.cpu = Math.round(d.cpu_usage ?? d.cpu ?? 0)
+      sysInfo.value.memory = Math.round(d.memory_percent ?? d.memory ?? 0)
+      sysInfo.value.memoryUsed = d.memory_used ?? 0
+      sysInfo.value.memoryTotal = d.memory_total ?? 0
+      if (Array.isArray(d.internal_ips)) internalIps.value = d.internal_ips
+    } catch {}
+  } else {
+    try {
+      const res = await getTrafficSummary()
+      trafficSummary.value = res.data || trafficSummary.value
+    } catch {}
+  }
 
   // 节点统计
   try {
@@ -282,12 +298,14 @@ onMounted(async () => {
     }).length
   } catch {}
 
-  // 用户数
-  try {
-    const res = await getUsers()
-    const d = res.data
-    userCount.value = Array.isArray(d) ? d.length : 0
-  } catch {}
+  if (userStore.isManager) {
+    try {
+      const res = await getHsUsers()
+      userCount.value = Array.isArray(res.data) ? res.data.length : 0
+    } catch {}
+  } else {
+    userCount.value = userStore.userInfo?.userId ? 1 : 0
+  }
 
   // 最近日志
   if (userStore.isManager) {
