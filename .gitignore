@@ -7,6 +7,7 @@ venv/
 docker/.env
 docker/secrets/*
 !docker/secrets/*.example
+docker/backups/
 *.db
 /config.yaml
 
