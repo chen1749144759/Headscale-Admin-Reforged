@@ -154,7 +154,7 @@ def get_db_conn():
 
 # ─── 日志记录 ─────────────────────────────────────────
 def record_log(conn, user_id: int, content: str):
-    """记录平台账户操作日志；不再把账户 ID 写入网络分组外键。"""
+    """记录用户操作日志。"""
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO log (account_id, content, created_at) VALUES (%s, %s, NOW())",
@@ -180,6 +180,8 @@ class CurrentUser:
         )
         self.network_user_id = _optional_int(account.get('userId'))
         self.network_name = str(account.get('networkName') or '')
+        self.group_id = _optional_int(account.get('groupId'))
+        self.group_name = str(account.get('groupName') or '')
         self.session_token = token
         self.raw_account = account
 
@@ -243,7 +245,7 @@ def require_node_access(node_id: int | str, user: CurrentUser) -> None:
     if user.is_manager():
         return
     if user.network_user_id is None:
-        raise HTTPException(403, '当前账户未绑定网络分组')
+        raise HTTPException(403, '当前用户没有可用的内部网络身份')
 
     conn = get_db_conn()
     try:

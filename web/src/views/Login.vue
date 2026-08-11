@@ -14,13 +14,13 @@
 
         <div class="brand-copy">
           <span class="brand-kicker">Zero-trust network operations</span>
-          <h1>统一管理 ScaleTail 节点、路由、流量与安全事件。</h1>
-          <p>为自有 Headscale 网络提供更清晰的控制台入口，面向日常运维、节点审计和客户端策略管理。</p>
+          <h1>统一管理 ScaleTail 用户、路由、流量与安全事件。</h1>
+          <p>为自有 Headscale 网络提供更清晰的控制台入口，面向日常运维、连接审计和客户端策略管理。</p>
         </div>
 
         <div class="signal-grid">
           <div class="signal-card">
-            <span>节点</span>
+            <span>用户</span>
             <strong>Identity</strong>
           </div>
           <div class="signal-card">

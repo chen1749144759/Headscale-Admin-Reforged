@@ -1,6 +1,6 @@
 """
 客户端策略路由
-管理全局、分组、机器三层限速和流量配额策略。
+管理全局、分组、用户三层限速和流量配额策略。
 """
 from typing import Optional
 
@@ -35,7 +35,7 @@ def _validate_policy(req: PolicyReq):
     if req.scope == 'group' and not (req.group_id or req.group_name):
         raise HTTPException(400, '分组策略必须选择分组')
     if req.scope == 'machine' and not req.machine_id:
-        raise HTTPException(400, '机器策略必须选择机器')
+        raise HTTPException(400, '用户策略必须选择用户')
     if req.exceed_action not in ('alert', 'throttle', 'block'):
         raise HTTPException(400, '超额动作只能是 alert/throttle/block')
 

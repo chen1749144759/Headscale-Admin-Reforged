@@ -6,16 +6,16 @@
     <div class="glass-card content-card" style="margin-bottom:16px">
       <div class="toolbar">
         <div class="toolbar-left">
-          <div class="section-title" style="margin:0">机器路由通告</div>
-          <el-input v-model="search" placeholder="搜索网段 / 机器名" prefix-icon="Search" clearable style="width:240px;margin-left:12px" />
+          <div class="section-title" style="margin:0">用户路由通告</div>
+          <el-input v-model="search" placeholder="搜索网段 / 用户名" prefix-icon="Search" clearable style="width:240px;margin-left:12px" />
         </div>
         <div class="toolbar-right">
           <el-button @click="loadRoutes" :icon="Refresh">刷新</el-button>
         </div>
       </div>
 
-      <el-table :data="filteredRoutes" v-loading="loading" stripe highlight-current-row empty-text="暂无路由通告（机器登录后需执行 scaletail set --advertise-routes=...）">
-        <el-table-column label="机器" min-width="140">
+      <el-table :data="filteredRoutes" v-loading="loading" stripe highlight-current-row empty-text="暂无路由通告（用户连接后可在 ScaleTail 中宣告路由）">
+        <el-table-column label="用户" min-width="140">
           <template #default="{ row }">
             <span style="font-weight:600">{{ row.nodeName }}</span>
             <el-tag size="small" effect="plain" style="margin-left:6px">{{ row.userName }}</el-tag>

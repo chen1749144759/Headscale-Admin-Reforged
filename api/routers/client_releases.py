@@ -72,24 +72,6 @@ def list_releases(user: CurrentUser = Depends(require_manager)):
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT pg_advisory_xact_lock(hashtext(%s))",
-            (f"scaletail-ota:{req.platform}",),
-        )
-        cur.execute(
-            """
-            SELECT COALESCE(MAX(policy_revision), 0) AS latest_revision
-            FROM client_releases
-            WHERE LOWER(platform) = %s
-            """,
-            (req.platform,),
-        )
-        latest_revision = int(cur.fetchone()["latest_revision"] or 0)
-        if req.policy_revision <= latest_revision:
-            raise HTTPException(
-                409,
-                f"策略修订号必须大于当前平台最新修订 {latest_revision}",
-            )
-        cur.execute(
             """
             SELECT
                 id, policy_revision, version, platform, update_type, title, description,
@@ -112,6 +94,24 @@ def create_release(req: ClientReleaseReq, user: CurrentUser = Depends(require_ma
     conn = get_db_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT pg_advisory_xact_lock(hashtext(%s))",
+            (f"scaletail-ota:{req.platform}",),
+        )
+        cur.execute(
+            """
+            SELECT COALESCE(MAX(policy_revision), 0) AS latest_revision
+            FROM client_releases
+            WHERE LOWER(platform) = %s
+            """,
+            (req.platform,),
+        )
+        latest_revision = int(cur.fetchone()["latest_revision"] or 0)
+        if req.policy_revision <= latest_revision:
+            raise HTTPException(
+                409,
+                f"策略修订号必须大于当前平台最新修订 {latest_revision}",
+            )
         cur.execute(
             """
             INSERT INTO client_releases (

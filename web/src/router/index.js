@@ -13,9 +13,9 @@ const routes = [
     redirect: '/console',
     children: [
       { path: 'console', name: 'Console', component: () => import('@/views/Console.vue') },
-      { path: 'users', name: 'Users', component: () => import('@/views/User.vue') },
+      { path: 'users', name: 'Users', component: () => import('@/views/Accounts.vue'), meta: { requiresManager: true } },
       { path: 'groups', name: 'Groups', component: () => import('@/views/Group.vue'), meta: { requiresManager: true } },
-      { path: 'accounts', name: 'Accounts', component: () => import('@/views/Accounts.vue'), meta: { requiresManager: true } },
+      { path: 'accounts', redirect: '/users' },
       { path: 'routes', name: 'Routes', component: () => import('@/views/Routes.vue') },
       { path: 'traffic', name: 'Traffic', component: () => import('@/views/Traffic.vue') },
       { path: 'client-policies', name: 'ClientPolicies', component: () => import('@/views/ClientPolicies.vue'), meta: { requiresManager: true } },

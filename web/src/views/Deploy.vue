@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h2>部署帮助</h2><p>安装 ScaleTail 客户端并使用平台账户连接</p></div>
+    <div class="page-header"><h2>部署帮助</h2><p>安装 ScaleTail 客户端并使用用户账户连接</p></div>
 
     <el-row :gutter="16">
       <el-col :xs="24" :sm="8" v-for="(p, i) in platforms" :key="i">
@@ -33,7 +33,7 @@
         <el-button type="primary" link size="small" class="copy-btn" @click="copy(passwordFileLoginCommand)">复制</el-button>
       </div>
       <p style="color:var(--v3s-text-muted);font-size:12px;margin-top:8px">
-        平台账户与 Headscale 网络分组一对一绑定。首次登录要求修改初始密码；密码修改满 90 天后，必须先更新密码才能继续登录或上报。
+        每个用户账户自动拥有独立的内部网络身份，并且只能连接一台客户端；多个用户可归入同一个业务分组。首次登录要求修改初始密码；密码修改满 90 天后，必须先更新密码才能继续登录或上报。
       </p>
     </div>
 

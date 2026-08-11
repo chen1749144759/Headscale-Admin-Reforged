@@ -15,7 +15,7 @@
       </div>
       <el-descriptions :column="1" border>
         <el-descriptions-item label="网络分组">
-          {{ userStore.userInfo?.networkName || '未绑定' }}
+          {{ userStore.userInfo?.groupName || '未分组' }}
         </el-descriptions-item>
         <el-descriptions-item label="账户到期">
           {{ formatTime(userStore.userInfo?.expiresAt) || '永不过期' }}

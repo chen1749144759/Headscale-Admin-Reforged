@@ -24,7 +24,7 @@
           <div class="tip-body">
             <p><b>ACL 规则页面</b>由两部分组成：<b>访问规则</b>和<b>分组定义</b>。它们共同构成 Headscale 的访问控制策略。</p>
             <p><b>访问规则 (acls)</b>：定义「谁」可以访问「谁」的「哪些端口」。来源和目标可以是账户名、分组定义名（group:xxx）、IP 地址或 autogroup。</p>
-            <p><b>分组定义 (groups)</b> 与 <b>分组管理页面</b> 的区别：分组管理页面管理的是 Headscale 的 <em>用户命名空间</em>（机器归属），而此处的分组定义是 ACL 策略层面的逻辑聚合 — 可以将多个用户命名空间归到一个 group:xxx 下，在访问规则中统一引用。例如 <code>group:devs = ["dev1", "dev2"]</code>，之后规则中写 <code>group:devs</code> 即代表 dev1 和 dev2 下的所有机器。你可以在「分组管理」页面快速管理分组定义。</p>
+            <p><b>业务分组</b>用于管理用户归属，例如 RD、DEV；此处的 <b>groups</b> 是 Headscale ACL 策略中的访问主体。ACL 策略可引用用户，或将多个用户写入 <code>group:xxx</code> 后统一授权。业务分组与 ACL 分组名称可以一致，但访问权限仍以此处保存的 ACL 规则为准。</p>
           </div>
         </details>
 

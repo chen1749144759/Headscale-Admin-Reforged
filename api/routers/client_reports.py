@@ -228,8 +228,10 @@ class PolicyStateReport(ClientReportModel):
 
 @dataclass(frozen=True)
 class TrustedNode:
-    id: int
+    node_id: int
     user_id: int
+    account_id: int
+    group_id: int | None
     machine_name: str
     group_name: str
     scaletail_ips: list[str]
@@ -252,15 +254,17 @@ def require_trusted_node(request: Request) -> TrustedNode:
         cur.execute(
             """
             SELECT
-                n.id,
+                n.id AS node_id,
                 n.user_id,
-                COALESCE(NULLIF(n.given_name, ''), NULLIF(n.hostname, ''), CONCAT('机器#', n.id)) AS machine_name,
-                COALESCE(u.name, '') AS group_name,
+                a.id AS account_id,
+                a.group_id,
+                a.username AS machine_name,
+                COALESCE(g.name, '') AS group_name,
                 n.ipv4,
                 n.ipv6
             FROM nodes n
-            JOIN users u ON u.id = n.user_id
             JOIN accounts a ON a.user_id = n.user_id
+            LEFT JOIN account_groups g ON g.id = a.group_id AND g.deleted_at IS NULL
             WHERE n.id = %s
               AND n.user_id = %s
               AND n.deleted_at IS NULL
@@ -290,8 +294,10 @@ def require_trusted_node(request: Request) -> TrustedNode:
         pass
 
     return TrustedNode(
-        id=int(row["id"]),
+        node_id=int(row["node_id"]),
         user_id=int(row["user_id"]),
+        account_id=int(row["account_id"]),
+        group_id=int(row["group_id"]) if row.get("group_id") is not None else None,
         machine_name=str(row.get("machine_name") or ""),
         group_name=str(row.get("group_name") or ""),
         scaletail_ips=[str(value) for value in (row.get("ipv4"), row.get("ipv6")) if value],
@@ -300,9 +306,9 @@ def require_trusted_node(request: Request) -> TrustedNode:
 
 
 def _bind_traffic_identity(report: TrafficReport, node: TrustedNode) -> None:
-    report.machine_id = node.id
+    report.machine_id = node.account_id
     report.machine_name = node.machine_name
-    report.group_id = node.user_id
+    report.group_id = node.group_id
     report.group_name = node.group_name
     report.scaletail_ips = node.scaletail_ips
     report.public_ip = node.source_ip
@@ -314,7 +320,7 @@ def _bind_traffic_identity(report: TrafficReport, node: TrustedNode) -> None:
 
 
 def _bind_policy_state_identity(report: PolicyStateReport, node: TrustedNode) -> None:
-    report.machine_id = node.id
+    report.machine_id = node.account_id
     report.machine_name = node.machine_name
 
 
@@ -599,7 +605,7 @@ def _maybe_create_ip_churn_event(conn, report: TrafficReport) -> None:
         """,
         (
             "medium",
-            "机器公网 IP 频繁变化",
+            "用户公网 IP 频繁变化",
             f"过去 24 小时观测到 {count} 个不同公网 IP，建议确认是否为正常办公网络切换。",
             report.group_id,
             report.group_name,
@@ -649,7 +655,7 @@ def _maybe_create_quota_event(
         """,
         (
             "high",
-            "机器月流量配额已超限",
+            "用户月流量配额已超限",
             f"本月已用 {month_bytes} 字节，超过配置配额 {quota_gb} GB。",
             group_id,
             group_name,
@@ -1026,9 +1032,9 @@ def effective_policy(
 ):
     conn = get_db_conn()
     try:
-        machine_id = node.id
+        machine_id = node.account_id
         machine_name = node.machine_name
-        group_id = node.user_id
+        group_id = node.group_id
         group_name = node.group_name
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(

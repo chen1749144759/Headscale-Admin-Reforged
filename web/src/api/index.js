@@ -44,16 +44,15 @@ export const deleteTrustedNetwork = (id) => request.delete(`/security/trusted-ne
 export const getRiskRules = () => request.get('/security/risk-rules')
 export const updateRiskRule = (key, data) => request.put(`/security/risk-rules/${key}`, data)
 
-// ─── 用户(机器) ──────────────────────────────────────
+// ─── 内部连接记录 ────────────────────────────────────
 export const getNodes = () => request.get('/users')
 export const deleteNode = (id) => request.delete(`/users/${id}`)
 export const expireNode = (id) => request.post(`/users/${id}/expire`)
 export const renameNode = (id, name) => request.post(`/users/${id}/rename?name=${name}`)
 export const getNodeInfo = (id) => request.get(`/users/${id}/info`)
 export const getNodeRoutes = (id) => request.get(`/users/${id}/routes`)
-export const moveNodeUser = (nodeId, newUser) => request.post(`/users/${nodeId}/move-user`, { new_user: newUser })
 
-// ─── 平台账户 ────────────────────────────────────────
+// ─── 用户 ────────────────────────────────────────────
 export const getUsers = () => request.get('/accounts')
 export const createUser = (data) => request.post('/accounts', data)
 export const updateUser = (id, data) => request.patch(`/accounts/${id}`, data)

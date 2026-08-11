@@ -52,7 +52,10 @@ def is_headscale_running() -> bool:
 
 
 def get_headscale_version(token: str) -> str:
-    result = hs_request("GET", "/api/v1/version", token=token)
+    try:
+        result = hs_request("GET", "/api/v1/version", token=token)
+    except HTTPException:
+        return ""
     if result.get("code") == 0:
         data = result.get("data")
         if isinstance(data, dict):

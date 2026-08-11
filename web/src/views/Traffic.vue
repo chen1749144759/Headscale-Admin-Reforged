@@ -4,7 +4,7 @@
       <div class="hero-copy">
         <div class="hero-kicker">ScaleForge Traffic Intelligence</div>
         <h2>流量观测中心</h2>
-        <p>按机器、分组、目标地址和采样频率查看 ScaleTail 网络运行质量。</p>
+        <p>按用户、分组、目标地址和采样频率查看 ScaleTail 网络运行质量。</p>
       </div>
       <div class="hero-actions">
         <el-radio-group v-model="days" size="large" @change="loadWindowData">
@@ -33,7 +33,7 @@
         <div class="panel-head">
           <div>
             <span class="panel-eyebrow">Machine Ranking</span>
-            <h3>机器流量排行</h3>
+            <h3>用户流量排行</h3>
           </div>
           <el-tag effect="plain">{{ windowLabel }}</el-tag>
         </div>
@@ -41,7 +41,7 @@
           <article v-for="(row, index) in topMachines" :key="row.machine_id || row.machine_name" class="rank-row">
             <span class="rank-index">{{ padRank(index + 1) }}</span>
             <div class="rank-main">
-              <div class="rank-title">{{ row.machine_name || '未知机器' }}</div>
+              <div class="rank-title">{{ row.machine_name || '未知用户' }}</div>
               <div class="rank-sub">{{ row.group_name || '未分组' }}</div>
               <div class="rank-bar"><span :style="{ width: machineShare(row) + '%' }"></span></div>
             </div>
@@ -50,7 +50,7 @@
               <span>收 {{ formatBytes(row.rx_bytes) }} / 发 {{ formatBytes(row.tx_bytes) }}</span>
             </div>
           </article>
-          <el-empty v-if="!topMachines.length && !rankingLoading" description="暂无机器流量" />
+          <el-empty v-if="!topMachines.length && !rankingLoading" description="暂无用户流量" />
         </div>
       </div>
 
@@ -67,7 +67,7 @@
             <span class="rank-index">{{ padRank(index + 1) }}</span>
             <div class="rank-main">
               <div class="rank-title">{{ row.group_name || '未分组' }}</div>
-              <div class="rank-sub">{{ row.machines || 0 }} 台机器</div>
+              <div class="rank-sub">{{ row.machines || 0 }} 个用户</div>
               <div class="rank-bar emerald"><span :style="{ width: groupShare(row) + '%' }"></span></div>
             </div>
             <div class="rank-numbers">
@@ -104,7 +104,7 @@
                   <el-tag size="small" effect="plain">{{ row.protocol || 'tcp' }}</el-tag>
                 </div>
                 <div class="destination-meta">
-                  {{ row.process_name || '未知进程' }} · {{ row.machines || 0 }} 台机器 · 最后 {{ row.last_seen || '-' }}
+                  {{ row.process_name || '未知进程' }} · {{ row.machines || 0 }} 个用户 · 最后 {{ row.last_seen || '-' }}
                 </div>
                 <div class="rank-bar amber"><span :style="{ width: destinationShare(row) + '%' }"></span></div>
               </div>
@@ -120,7 +120,7 @@
         <div class="flow-card">
           <div class="section-head">
             <h4>最近连接明细</h4>
-            <span>按用户(机器)分组</span>
+            <span>按用户分组</span>
           </div>
           <div v-loading="flowLoading" class="flow-groups">
             <article v-for="group in groupedFlows" :key="group.machine" class="flow-group">
@@ -172,7 +172,7 @@
         <article v-for="row in sampleHealth" :key="row.machine_id || row.machine_name" class="sample-card">
           <div class="sample-head">
             <div>
-              <strong>{{ row.machine_name || '未知机器' }}</strong>
+              <strong>{{ row.machine_name || '未知用户' }}</strong>
               <span>{{ row.group_name || '未分组' }}</span>
             </div>
             <span class="sample-last">最后 {{ row.last_seen || '-' }}</span>
@@ -266,7 +266,7 @@ const statCards = computed(() => [
     bg: 'rgba(245, 158, 11, 0.14)',
   },
   {
-    label: '活跃机器',
+    label: '活跃用户',
     value: summary.value.active_machines || 0,
     icon: markRaw(Cpu),
     color: '#7c3aed',
@@ -282,7 +282,7 @@ const maxDestinationConnections = computed(() => Math.max(1, ...destinationRows.
 const groupedFlows = computed(() => {
   const map = new Map()
   for (const row of flows.value) {
-    const machine = row.machine_name || '未知机器'
+    const machine = row.machine_name || '未知用户'
     const item = map.get(machine) || {
       machine,
       group: row.group_name || '',

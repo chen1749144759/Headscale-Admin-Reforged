@@ -29,15 +29,43 @@ def list_routes(user: CurrentUser = Depends(get_current_user)):
         elif isinstance(data, list):
             nodes = data
 
+    user_ids = {
+        int((node.get('user') or {}).get('id'))
+        for node in nodes
+        if str((node.get('user') or {}).get('id') or '').isdigit()
+    }
+    account_by_user_id = {}
+    if user_ids:
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT a.user_id, a.username, COALESCE(g.name, '') AS group_name
+                FROM accounts a
+                LEFT JOIN account_groups g ON g.id = a.group_id AND g.deleted_at IS NULL
+                WHERE a.deleted_at IS NULL AND a.user_id = ANY(%s)
+                """,
+                (list(user_ids),),
+            )
+            account_by_user_id = {
+                int(row['user_id']): row
+                for row in cur.fetchall()
+                if row.get('user_id') is not None
+            }
+        finally:
+            conn.close()
+
     route_list = []
     for node in nodes:
         node_user_id = (node.get('user') or {}).get('id')
         if not user.is_manager() and str(node_user_id or '') != str(user.network_user_id or ''):
             continue
         node_id = node.get('id')
-        node_name = node.get('givenName') or node.get('name') or str(node_id)
+        account_info = account_by_user_id.get(int(node_user_id or 0), {})
+        node_name = account_info.get('username') or node.get('givenName') or node.get('name') or str(node_id)
         user_info = node.get('user', {})
-        group_name = user_info.get('name', '-') if user_info else '-'
+        group_name = account_info.get('group_name') or '-'
 
         available = node.get('availableRoutes') or node.get('available_routes') or []
         approved = node.get('approvedRoutes') or node.get('approved_routes') or []

@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h2>限速策略</h2>
-      <p>按全局、分组、机器三层配置客户端限速与月流量配额，多个策略命中时取最严格的限制。</p>
+      <p>按全局、分组、用户三层配置客户端限速与月流量配额，多个策略命中时取最严格的限制。</p>
     </div>
 
     <div class="glass-card content-card">
@@ -56,7 +56,7 @@
     <div class="glass-card content-card" style="margin-top:16px">
       <div class="section-title">客户端应用状态</div>
       <el-table :data="states" size="small" stripe>
-        <el-table-column prop="machine_name" label="机器" min-width="140" />
+        <el-table-column prop="machine_name" label="用户" min-width="140" />
         <el-table-column label="命中策略" min-width="120">
           <template #default="{ row }">{{ (row.matched_policy_ids || []).join(', ') || '-' }}</template>
         </el-table-column>
@@ -79,7 +79,7 @@
           <el-radio-group v-model="form.scope" @change="resetTarget">
             <el-radio-button label="global">全局</el-radio-button>
             <el-radio-button label="group">分组</el-radio-button>
-            <el-radio-button label="machine">机器</el-radio-button>
+            <el-radio-button label="machine">用户</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
@@ -89,13 +89,13 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item v-if="form.scope === 'machine'" label="机器">
-          <el-select v-model="form.machine_id" filterable placeholder="选择机器" style="width:100%" @change="syncMachineName">
+        <el-form-item v-if="form.scope === 'machine'" label="用户">
+          <el-select v-model="form.machine_id" filterable placeholder="选择用户" style="width:100%" @change="syncMachineName">
             <el-option
-              v-for="node in nodes"
-              :key="node.id"
-              :label="`${node.givenName || node.name} / ${node.user?.name || '-'}`"
-              :value="node.id"
+              v-for="account in users"
+              :key="account.id"
+              :label="`${account.username} / ${account.groupName || '未分组'}`"
+              :value="account.id"
             />
           </el-select>
         </el-form-item>
@@ -147,7 +147,7 @@ import {
   getClientPolicies,
   getClientPolicyStates,
   getHsUsers,
-  getNodes,
+  getUsers,
   updateClientPolicy,
 } from '@/api'
 
@@ -157,7 +157,7 @@ const dialogVisible = ref(false)
 const policies = ref([])
 const states = ref([])
 const groups = ref([])
-const nodes = ref([])
+const users = ref([])
 
 const emptyForm = {
   id: null,
@@ -177,7 +177,7 @@ const emptyForm = {
 const form = reactive({ ...emptyForm })
 
 function scopeText(scope) {
-  return ({ global: '全局', group: '分组', machine: '机器' })[scope] || scope
+  return ({ global: '全局', group: '分组', machine: '用户' })[scope] || scope
 }
 
 function scopeType(scope) {
@@ -199,9 +199,9 @@ function quotaText(value) {
 }
 
 function targetText(row) {
-  if (row.scope === 'global') return '所有机器'
+  if (row.scope === 'global') return '所有用户'
   if (row.scope === 'group') return row.group_name || `分组#${row.group_id}`
-  return row.machine_name || `机器#${row.machine_id}`
+  return row.machine_name || `用户#${row.machine_id}`
 }
 
 function normalizeLimit(value) {
@@ -226,15 +226,14 @@ function syncGroupName() {
 }
 
 function syncMachineName() {
-  const node = nodes.value.find(item => item.id === form.machine_id)
-  form.machine_name = node ? (node.givenName || node.name || '') : ''
+  const account = users.value.find(item => item.id === form.machine_id)
+  form.machine_name = account?.username || ''
 }
 
 async function loadOptions() {
-  const [groupRes, nodeRes] = await Promise.all([getHsUsers(), getNodes()])
+  const [groupRes, userRes] = await Promise.all([getHsUsers(), getUsers()])
   groups.value = groupRes.data || []
-  const nodeData = nodeRes.data
-  nodes.value = Array.isArray(nodeData) ? nodeData : (nodeData?.nodes || [])
+  users.value = (userRes.data || []).filter(account => account.role === 'user')
 }
 
 async function loadAll() {

@@ -44,7 +44,7 @@
               </template>
             </el-table-column>
             <el-table-column prop="title" label="事件" min-width="190" show-overflow-tooltip />
-            <el-table-column prop="machine_name" label="机器" width="130" />
+            <el-table-column prop="machine_name" label="用户" width="130" />
             <el-table-column prop="group_name" label="分组" width="110" />
             <el-table-column prop="ip" label="IP" width="140" />
             <el-table-column label="位置" min-width="140">
@@ -83,7 +83,7 @@
             </div>
           </div>
           <el-table :data="ipObservations" v-loading="ipLoading" stripe>
-            <el-table-column prop="machine_name" label="机器" min-width="130" />
+            <el-table-column prop="machine_name" label="用户" min-width="130" />
             <el-table-column prop="group_name" label="分组" width="110" />
             <el-table-column prop="ip" label="公网 IP" width="140" />
             <el-table-column label="位置" min-width="180">

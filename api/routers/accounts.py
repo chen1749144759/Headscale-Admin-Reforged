@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 from typing import Optional
 
 import httpx
@@ -13,14 +12,11 @@ from .dependencies import CurrentUser, require_manager
 from .headscale_client import HeadscaleUnavailable, request as headscale_request, response_error
 
 
-router = APIRouter(prefix="/api/accounts", tags=["平台账户"])
-_binding_lock = threading.Lock()
-
-
+router = APIRouter(prefix="/api/accounts", tags=["用户"])
 class AccountCreateReq(BaseModel):
     username: str
     password: str
-    user_id: Optional[int] = Field(default=None, alias="userId")
+    group_id: Optional[int] = Field(default=None, alias="groupId")
     role: str = "user"
     enabled: bool = True
     expires_at: Optional[str] = Field(default=None, alias="expiresAt")
@@ -34,8 +30,8 @@ class AccountUpdateReq(BaseModel):
     enabled: Optional[bool] = None
     expires_at: Optional[str] = Field(default=None, alias="expiresAt")
     clear_expires_at: bool = Field(default=False, alias="clearExpiresAt")
-    user_id: Optional[int] = Field(default=None, alias="userId")
-    clear_user: bool = Field(default=False, alias="clearUser")
+    group_id: Optional[int] = Field(default=None, alias="groupId")
+    clear_group: bool = Field(default=False, alias="clearGroup")
 
     model_config = {"populate_by_name": True}
 
@@ -75,21 +71,6 @@ def _list_private_accounts(user: CurrentUser) -> list[dict]:
     return payload
 
 
-def _assert_user_binding_available(
-    accounts: list[dict],
-    user_id: int | None,
-    *,
-    exclude_account_id: int | None = None,
-) -> None:
-    if user_id is None:
-        return
-    for account in accounts:
-        if exclude_account_id is not None and int(account.get("id", 0)) == exclude_account_id:
-            continue
-        if account.get("userId") is not None and int(account["userId"]) == user_id:
-            raise HTTPException(409, "该网络分组已绑定其他账户；账户与分组必须一对一")
-
-
 @router.get("")
 def list_accounts(user: CurrentUser = Depends(require_manager)):
     return {"code": 0, "data": _list_private_accounts(user)}
@@ -97,24 +78,22 @@ def list_accounts(user: CurrentUser = Depends(require_manager)):
 
 @router.post("")
 def create_account(req: AccountCreateReq, user: CurrentUser = Depends(require_manager)):
-    if req.role == 'user' and req.user_id is None:
-        raise HTTPException(400, '普通账户必须绑定一个网络分组')
-    with _binding_lock:
-        _assert_user_binding_available(_list_private_accounts(user), req.user_id)
-        response = _private_or_error(
-            "POST",
-            "/v1/accounts",
-            user,
-            data={
-                "username": req.username.strip(),
-                "password": req.password,
-                "userId": req.user_id,
-                "role": req.role,
-                "enabled": req.enabled,
-                "expiresAt": req.expires_at,
-            },
-            expected=(201,),
-        )
+    if req.role == 'user' and req.group_id is None:
+        raise HTTPException(400, '普通用户必须属于一个业务分组')
+    response = _private_or_error(
+        "POST",
+        "/v1/accounts",
+        user,
+        data={
+            "username": req.username.strip(),
+            "password": req.password,
+            "groupId": req.group_id,
+            "role": req.role,
+            "enabled": req.enabled,
+            "expiresAt": req.expires_at,
+        },
+        expected=(201,),
+    )
     account = response.json()
     return {"code": 0, "msg": "账户已创建", "data": account}
 
@@ -126,32 +105,25 @@ def update_account(
     user: CurrentUser = Depends(require_manager),
 ):
     payload = req.model_dump(by_alias=True, exclude_none=True)
-    with _binding_lock:
-        accounts = _list_private_accounts(user)
-        target = next((item for item in accounts if int(item.get('id', 0)) == account_id), None)
-        if target is None:
-            raise HTTPException(404, '账户不存在')
-        resulting_role = req.role or target.get('role') or 'user'
-        if req.clear_user:
-            resulting_user_id = None
-        elif req.user_id is not None:
-            resulting_user_id = req.user_id
-        else:
-            resulting_user_id = target.get('userId')
-        if resulting_role == 'user' and resulting_user_id is None:
-            raise HTTPException(400, '普通账户必须绑定一个网络分组')
-        if req.user_id is not None and not req.clear_user:
-            _assert_user_binding_available(
-                accounts,
-                req.user_id,
-                exclude_account_id=account_id,
-            )
-        response = _private_or_error(
-            "PATCH",
-            f"/v1/accounts/{account_id}",
-            user,
-            data=payload,
-        )
+    accounts = _list_private_accounts(user)
+    target = next((item for item in accounts if int(item.get('id', 0)) == account_id), None)
+    if target is None:
+        raise HTTPException(404, '账户不存在')
+    resulting_role = req.role or target.get('role') or 'user'
+    if req.clear_group:
+        resulting_group_id = None
+    elif req.group_id is not None:
+        resulting_group_id = req.group_id
+    else:
+        resulting_group_id = target.get('groupId')
+    if resulting_role == 'user' and resulting_group_id is None:
+        raise HTTPException(400, '普通用户必须属于一个业务分组')
+    response = _private_or_error(
+        "PATCH",
+        f"/v1/accounts/{account_id}",
+        user,
+        data=payload,
+    )
     account = response.json()
     return {"code": 0, "msg": "账户已更新", "data": account}
 

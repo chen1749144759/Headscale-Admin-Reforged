@@ -13,11 +13,12 @@ from psycopg2 import sql
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATIONS_DIR = ROOT / "migrations"
 
-CORE_READ_TABLES = ("users", "nodes")
+CORE_READ_TABLES = ("users", "nodes", "account_groups")
 ACCOUNT_READ_COLUMNS = (
     "id",
     "username",
     "user_id",
+    "group_id",
     "enabled",
     "expires_at",
     "must_change_password",

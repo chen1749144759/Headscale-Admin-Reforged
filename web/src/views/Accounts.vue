@@ -1,22 +1,22 @@
 <template>
   <div>
-    <div class="page-header"><h2>平台账户</h2><p>账户与网络分组一对一绑定，身份由 Headscale 统一管理</p></div>
+    <div class="page-header"><h2>用户管理</h2><p>一个用户对应一个独立的 ScaleTail 网络身份，多个用户可以加入同一业务分组</p></div>
 
     <div class="glass-card content-card">
       <div class="toolbar">
-        <el-input v-model="search" placeholder="搜索账户或网络分组" prefix-icon="Search" clearable style="width:260px" />
+        <el-input v-model="search" placeholder="搜索用户或业务分组" prefix-icon="Search" clearable style="width:260px" />
         <div class="toolbar-right">
           <el-button :icon="Refresh" @click="loadData">刷新</el-button>
-          <el-button type="primary" @click="openCreate">新建账户</el-button>
+          <el-button type="primary" @click="openCreate">新建用户</el-button>
         </div>
       </div>
 
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:16px">
-        <template #title>普通账户必须绑定一个未占用的 Headscale 网络分组；新建或重置产生的密码仅用于首次登录，用户必须立即修改。</template>
+        <template #title>每个普通用户只能登录一台客户端；业务分组可以重复选择。新建或重置产生的密码仅用于首次登录，用户必须立即修改。</template>
       </el-alert>
 
       <el-table :data="filteredAccounts" v-loading="loading" stripe>
-        <el-table-column prop="username" label="账户" min-width="130" />
+        <el-table-column prop="username" label="用户" min-width="130" />
         <el-table-column label="角色" width="100">
           <template #default="{ row }">
             <el-tag :type="row.role === 'manager' ? 'danger' : 'info'" effect="plain">
@@ -24,8 +24,8 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="networkName" label="网络分组" min-width="130">
-          <template #default="{ row }">{{ row.networkName || '未绑定' }}</template>
+        <el-table-column prop="groupName" label="业务分组" min-width="130">
+          <template #default="{ row }">{{ row.groupName || '未分组' }}</template>
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
@@ -50,7 +50,7 @@
       </el-table>
     </div>
 
-    <el-dialog v-model="accountDialog" :title="editing ? '编辑账户' : '新建账户'" width="520px" destroy-on-close>
+    <el-dialog v-model="accountDialog" :title="editing ? '编辑用户' : '新建用户'" width="520px" destroy-on-close>
       <el-form ref="accountFormRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="用户名" prop="username"><el-input v-model="form.username" maxlength="255" /></el-form-item>
         <template v-if="!editing">
@@ -63,14 +63,13 @@
             <el-option label="管理员" value="manager" />
           </el-select>
         </el-form-item>
-        <el-form-item label="网络分组" :required="form.role === 'user'">
-          <el-select v-model="form.userId" clearable placeholder="选择唯一绑定分组" style="width:100%">
+        <el-form-item label="业务分组" :required="form.role === 'user'">
+          <el-select v-model="form.groupId" clearable placeholder="选择业务分组" style="width:100%">
             <el-option
               v-for="group in networkGroups"
               :key="group.id"
               :label="group.name"
               :value="Number(group.id)"
-              :disabled="isGroupUsed(group.id)"
             />
           </el-select>
         </el-form-item>
@@ -87,7 +86,7 @@
 
     <el-dialog v-model="resetDialog" title="重置账户密码" width="460px" destroy-on-close>
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
-        <template #title>重置后现有会话和设备认证立即失效；此处设置的是临时密码，用户下次登录必须修改。</template>
+        <template #title>重置后现有会话和客户端认证立即失效；此处设置的是临时密码，用户下次登录必须修改。</template>
       </el-alert>
       <el-form ref="resetFormRef" :model="resetForm" :rules="resetRules" label-width="100px">
         <el-form-item label="账户">{{ resetTarget?.username }}</el-form-item>
@@ -120,7 +119,7 @@ const resetDialog = ref(false)
 const resetTarget = ref(null)
 const resetFormRef = ref(null)
 
-const emptyForm = () => ({ username: '', password: '', confirmPassword: '', role: 'user', userId: null, expiresAt: null, enabled: true })
+const emptyForm = () => ({ username: '', password: '', confirmPassword: '', role: 'user', groupId: null, expiresAt: null, enabled: true })
 const form = reactive(emptyForm())
 const resetForm = reactive({ password: '', confirmPassword: '' })
 
@@ -143,17 +142,13 @@ const resetRules = {
 const filteredAccounts = computed(() => {
   const keyword = search.value.trim().toLowerCase()
   if (!keyword) return accounts.value
-  return accounts.value.filter((item) => `${item.username} ${item.networkName || ''}`.toLowerCase().includes(keyword))
+  return accounts.value.filter((item) => `${item.username} ${item.groupName || ''}`.toLowerCase().includes(keyword))
 })
 
 function formatTime(value) {
   if (!value) return ''
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
-}
-
-function isGroupUsed(groupId) {
-  return accounts.value.some((item) => Number(item.userId) === Number(groupId) && item.id !== editing.value?.id)
 }
 
 async function loadData() {
@@ -182,7 +177,7 @@ function openEdit(row) {
   assignForm({
     username: row.username,
     role: row.role,
-    userId: row.userId == null ? null : Number(row.userId),
+    groupId: row.groupId == null ? null : Number(row.groupId),
     expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
     enabled: row.enabled,
   })
@@ -191,20 +186,19 @@ function openEdit(row) {
 
 async function saveAccount() {
   await accountFormRef.value.validate()
-  if (form.role === 'user' && form.userId == null) return ElMessage.warning('普通账户必须绑定网络分组')
-  if (form.userId != null && isGroupUsed(form.userId)) return ElMessage.warning('该网络分组已绑定其他账户')
+  if (form.role === 'user' && form.groupId == null) return ElMessage.warning('普通用户必须选择业务分组')
   saving.value = true
   try {
     const common = {
       username: form.username.trim(),
       role: form.role,
       enabled: form.enabled,
-      userId: form.userId,
+      groupId: form.groupId,
     }
     if (editing.value) {
       await updateUser(editing.value.id, {
         ...common,
-        ...(form.userId == null ? { clearUser: true } : {}),
+        ...(form.groupId == null ? { clearGroup: true } : {}),
         ...(form.expiresAt ? { expiresAt: form.expiresAt.toISOString() } : { clearExpiresAt: true }),
       })
     } else {
@@ -214,7 +208,7 @@ async function saveAccount() {
         ...(form.expiresAt ? { expiresAt: form.expiresAt.toISOString() } : {}),
       })
     }
-    ElMessage.success(editing.value ? '账户已更新' : '账户已创建，初始密码需由用户首次登录后修改')
+    ElMessage.success(editing.value ? '用户已更新' : '用户已创建，初始密码需由用户首次登录后修改')
     accountDialog.value = false
     await loadData()
   } finally {

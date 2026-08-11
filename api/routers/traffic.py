@@ -1,6 +1,6 @@
 """
 流量统计路由
-提供全局、分组、机器维度的流量查询接口。
+提供全局、分组、用户维度的流量查询接口。
 """
 import ipaddress
 import math
@@ -22,20 +22,10 @@ _scaletail_network_cache: dict[str, dict[str, Any]] = {}
 
 
 def _account_scope(user: CurrentUser, table_alias: str) -> tuple[str, list[int]]:
-    """Authorize historical rows by the node's current owner, not stale snapshots."""
+    """Authorize historical rows by the stable business account ID."""
     if user.is_manager():
         return "", []
-    if user.network_user_id is None:
-        return " AND 1=0", []
-    return f"""
-        AND EXISTS (
-            SELECT 1
-            FROM nodes scope_node
-            WHERE scope_node.id = {table_alias}.machine_id
-              AND scope_node.user_id = %s
-              AND scope_node.deleted_at IS NULL
-        )
-    """, [user.network_user_id]
+    return f" AND {table_alias}.machine_id = %s", [user.id]
 
 
 def _append_account_scope(
@@ -46,19 +36,8 @@ def _append_account_scope(
 ) -> None:
     if user.is_manager():
         return
-    if user.network_user_id is None:
-        where.append("1=0")
-        return
-    where.append(f"""
-        EXISTS (
-            SELECT 1
-            FROM nodes scope_node
-            WHERE scope_node.id = {table_alias}.machine_id
-              AND scope_node.user_id = %s
-              AND scope_node.deleted_at IS NULL
-        )
-    """)
-    params.append(user.network_user_id)
+    where.append(f"{table_alias}.machine_id = %s")
+    params.append(user.id)
 
 
 def _extract_hs_nodes(result: Any) -> list[dict]:
@@ -322,7 +301,7 @@ def traffic_maintenance(user: CurrentUser = Depends(require_manager)):
 
 @router.get('/top-machines')
 def top_machines(days: int = 7, user: CurrentUser = Depends(get_current_user)):
-    """获取机器流量排行"""
+    """获取用户流量排行"""
     days = max(1, min(days, 90))
     conn = get_db_conn()
     try:
@@ -331,7 +310,7 @@ def top_machines(days: int = 7, user: CurrentUser = Depends(get_current_user)):
         cur.execute(f"""
             SELECT
                 ts.machine_id,
-                COALESCE(ts.machine_name, CONCAT('机器#', ts.machine_id)) AS machine_name,
+                COALESCE(ts.machine_name, CONCAT('用户#', ts.machine_id)) AS machine_name,
                 ts.group_name,
                 COALESCE(SUM(ts.rx_bytes_delta), 0) AS rx_bytes,
                 COALESCE(SUM(ts.tx_bytes_delta), 0) AS tx_bytes,
@@ -421,7 +400,7 @@ def sample_health(
     interval_seconds: int = 15,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """按机器聚合最近 24/12 小时连续活跃时段的上报完整率。"""
+    """按用户聚合最近 24/12 小时连续活跃时段的上报完整率。"""
     interval_seconds = max(5, min(interval_seconds, 3600))
     conn = get_db_conn()
     try:
@@ -430,7 +409,7 @@ def sample_health(
         cur.execute(f"""
             SELECT
                 ts.machine_id,
-                COALESCE(ts.machine_name, CONCAT('机器#', ts.machine_id)) AS machine_name,
+                COALESCE(ts.machine_name, CONCAT('用户#', ts.machine_id)) AS machine_name,
                 ts.group_name,
                 ARRAY_AGG(ts.observed_at ORDER BY ts.observed_at)
                     FILTER (WHERE ts.observed_at >= NOW() - INTERVAL '24 hours') AS samples_24h,
@@ -450,7 +429,7 @@ def sample_health(
             last_seen = row.get('last_seen')
             rows.append({
                 'machine_id': row.get('machine_id'),
-                'machine_name': row.get('machine_name') or '未知机器',
+                'machine_name': row.get('machine_name') or '未知用户',
                 'group_name': row.get('group_name') or '',
                 'last_seen': last_seen.strftime('%Y-%m-%d %H:%M:%S') if last_seen else '',
                 'windows': {

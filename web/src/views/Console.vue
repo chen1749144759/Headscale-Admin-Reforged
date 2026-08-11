@@ -163,7 +163,7 @@ import { ref, computed, onMounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useTrafficStore, startTrafficSampling, MAX_TRAFFIC_SAMPLES } from '@/stores/traffic'
-import { getSystemInfo, getNodes, getHsUsers, getLogs, getTrafficSummary } from '@/api'
+import { getSystemInfo, getNodes, getHsUsers, getUsers, getLogs, getTrafficSummary } from '@/api'
 import { Monitor, Cpu, Connection, UserFilled, Setting, Guide, SetUp, Download, Upload } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -175,9 +175,9 @@ if (userStore.isManager) startTrafficSampling()
 
 const sysInfo = ref({ cpu: 0, memory: 0, memoryUsed: 0, memoryTotal: 0 })
 const internalIps = ref([])
-const nodeCount = ref(0)
+const accountCount = ref(0)
 const onlineCount = ref(0)
-const userCount = ref(0)
+const groupCount = ref(0)
 const recentLogs = ref([])
 const trafficSummary = ref({ today_rx_bytes: 0, today_tx_bytes: 0 })
 
@@ -227,12 +227,12 @@ const serverUrl = computed(() => userStore.systemStatus.server_url || '')
 
 const statCards = computed(() => {
   const cards = [
-    { label: '在线机器', value: onlineCount.value, icon: markRaw(Connection), color: '#10b981' },
-    { label: '总机器数', value: nodeCount.value, icon: markRaw(Monitor), color: '#4f46e5' },
+    { label: '在线用户', value: onlineCount.value, icon: markRaw(Connection), color: '#10b981' },
+    { label: '用户总数', value: accountCount.value, icon: markRaw(Monitor), color: '#4f46e5' },
   ]
   if (userStore.isManager) {
     cards.push(
-      { label: '分组数', value: userCount.value, icon: markRaw(UserFilled), color: '#f59e0b' },
+      { label: '分组数', value: groupCount.value, icon: markRaw(UserFilled), color: '#f59e0b' },
       { label: 'CPU 使用率', value: sysInfo.value.cpu + '%', icon: markRaw(Cpu), color: '#06b6d4' },
     )
   } else {
@@ -245,11 +245,11 @@ const statCards = computed(() => {
 })
 
 const quickActions = computed(() => [
-  { label: '用户管理', desc: '查看和管理网络机器', path: '/users', icon: markRaw(Connection), color: 'rgba(79,70,229,.12)' },
+  { label: '用户管理', desc: '创建用户并分配业务分组', path: '/users', icon: markRaw(Connection), color: 'rgba(79,70,229,.12)', managerOnly: true },
   { label: '路由管理', desc: '管理子网路由通告', path: '/routes', icon: markRaw(Guide), color: 'rgba(6,182,212,.12)' },
-  { label: '系统设置', desc: '配置 Headscale 连接', path: '/settings', icon: markRaw(Setting), color: 'rgba(245,158,11,.12)' },
-  { label: 'DNS 配置', desc: '配置 MagicDNS 和下发 DNS', path: '/settings/dns', icon: markRaw(SetUp), color: 'rgba(59,130,246,.12)' },
-].filter(item => userStore.isManager || !item.path.startsWith('/settings')))
+  { label: '系统设置', desc: '配置 Headscale 连接', path: '/settings', icon: markRaw(Setting), color: 'rgba(245,158,11,.12)', managerOnly: true },
+  { label: 'DNS 配置', desc: '配置 MagicDNS 和下发 DNS', path: '/settings/dns', icon: markRaw(SetUp), color: 'rgba(59,130,246,.12)', managerOnly: true },
+].filter(item => !item.managerOnly || userStore.isManager))
 
 function progressColor(v) {
   if (v > 80) return '#ef4444'
@@ -284,12 +284,11 @@ onMounted(async () => {
     } catch {}
   }
 
-  // 节点统计
+  // 在线状态来自协议节点；业务总数来自平台用户。
   try {
     const res = await getNodes()
     const d = res.data
     const nodes = Array.isArray(d) ? d : (d?.nodes || [])
-    nodeCount.value = nodes.length
     const now = new Date()
     onlineCount.value = nodes.filter(n => {
       if (n.online) return true
@@ -301,10 +300,15 @@ onMounted(async () => {
   if (userStore.isManager) {
     try {
       const res = await getHsUsers()
-      userCount.value = Array.isArray(res.data) ? res.data.length : 0
+      groupCount.value = Array.isArray(res.data) ? res.data.length : 0
+    } catch {}
+    try {
+      const res = await getUsers()
+      accountCount.value = (res.data || []).filter(account => account.role === 'user').length
     } catch {}
   } else {
-    userCount.value = userStore.userInfo?.userId ? 1 : 0
+    accountCount.value = 1
+    groupCount.value = userStore.userInfo?.groupId ? 1 : 0
   }
 
   // 最近日志

@@ -16,7 +16,7 @@ from api.routers import headscale_client
 from api.routers import dependencies as deps
 from api import migrate
 from api.routers.acl import _parse_policy, _reject_identity_tags
-from api.routers.accounts import _assert_user_binding_available
+from api.routers.accounts import AccountCreateReq
 from api.routers.client_reports import (
     PolicyStateReport,
     TrafficReport,
@@ -142,7 +142,7 @@ class HeadscaleSocketContractTests(unittest.TestCase):
 
 
 class AccountOwnershipTests(unittest.TestCase):
-    def test_current_user_uses_network_user_id(self):
+    def test_current_user_projects_internal_identity_and_business_group(self):
         user = CurrentUser(
             {
                 "id": 7,
@@ -150,7 +150,9 @@ class AccountOwnershipTests(unittest.TestCase):
                 "role": "user",
                 "enabled": True,
                 "userId": 42,
-                "networkName": "engineering",
+                "networkName": "account-alice",
+                "groupId": 8,
+                "groupName": "RD",
             },
             "opaque",
             False,
@@ -158,16 +160,13 @@ class AccountOwnershipTests(unittest.TestCase):
         self.assertEqual(user.id, 7)
         self.assertEqual(user.network_user_id, 42)
         self.assertNotEqual(user.id, user.network_user_id)
+        self.assertEqual(user.group_id, 8)
+        self.assertEqual(user.group_name, "RD")
 
-    def test_duplicate_network_binding_is_rejected(self):
-        accounts = [{"id": 1, "username": "alice", "userId": 42}]
-        with self.assertRaises(HTTPException) as raised:
-            _assert_user_binding_available(accounts, 42)
-        self.assertEqual(raised.exception.status_code, 409)
-
-    def test_editing_current_binding_is_allowed(self):
-        accounts = [{"id": 1, "username": "alice", "userId": 42}]
-        _assert_user_binding_available(accounts, 42, exclude_account_id=1)
+    def test_business_group_is_reusable_by_multiple_users(self):
+        alice = AccountCreateReq(username="alice", password="a" * 12, groupId=8)
+        bob = AccountCreateReq(username="bob", password="b" * 12, groupId=8)
+        self.assertEqual(alice.group_id, bob.group_id)
 
 
 class MigrationAndLogContractTests(unittest.TestCase):
@@ -213,6 +212,7 @@ class MigrationAndLogContractTests(unittest.TestCase):
             "id",
             "username",
             "user_id",
+            "group_id",
             "enabled",
             "expires_at",
             "must_change_password",
@@ -373,10 +373,12 @@ class ClientNoiseIdentityTests(unittest.TestCase):
 
     def test_client_payload_cannot_override_trusted_identity(self):
         node = TrustedNode(
-            id=9,
+            node_id=9,
             user_id=42,
-            machine_name="office-pc",
-            group_name="engineering",
+            account_id=7,
+            group_id=8,
+            machine_name="alice",
+            group_name="RD",
             scaletail_ips=["100.64.0.9"],
             source_ip="203.0.113.8",
         )
@@ -389,15 +391,15 @@ class ClientNoiseIdentityTests(unittest.TestCase):
             country="spoofed",
         )
         _bind_traffic_identity(traffic, node)
-        self.assertEqual((traffic.machine_id, traffic.group_id), (9, 42))
-        self.assertEqual((traffic.machine_name, traffic.group_name), ("office-pc", "engineering"))
+        self.assertEqual((traffic.machine_id, traffic.group_id), (7, 8))
+        self.assertEqual((traffic.machine_name, traffic.group_name), ("alice", "RD"))
         self.assertEqual(traffic.scaletail_ips, ["100.64.0.9"])
         self.assertEqual(traffic.public_ip, "203.0.113.8")
         self.assertEqual(traffic.country, "")
 
         state = PolicyStateReport(machine_id=777, machine_name="spoofed")
         _bind_policy_state_identity(state, node)
-        self.assertEqual((state.machine_id, state.machine_name), (9, "office-pc"))
+        self.assertEqual((state.machine_id, state.machine_name), (7, "alice"))
 
 
 class AuthenticationBoundaryTests(unittest.TestCase):

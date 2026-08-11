@@ -10,16 +10,26 @@ const request = axios.create({
 })
 
 function errorDetail(error) {
+  const endpoint = error.config?.url || '未知接口'
+  if (!error.response) {
+    return { code: 'network_error', message: `无法连接管理服务：${endpoint}` }
+  }
   const detail = error.response?.data?.detail
   if (detail && typeof detail === 'object') {
     return {
       code: detail.code || '',
-      message: detail.message || detail.error || '请求失败',
+      message: detail.message || detail.error || `请求失败：${endpoint}`,
     }
   }
   return {
     code: error.response?.data?.code || '',
-    message: detail || error.response?.data?.msg || '请求失败',
+    message: detail || error.response?.data?.msg || (
+      error.response?.status === 404
+        ? `接口不存在：${endpoint}`
+        : error.response?.status >= 500
+          ? `服务处理失败：${endpoint}`
+          : `请求失败：${endpoint}`
+    ),
   }
 }
 
