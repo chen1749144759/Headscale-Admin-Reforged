@@ -224,7 +224,7 @@ cd ScaleForge/docker
 
 脚本会先拉取镜像，再把 `.env`、部署 secret、当前镜像引用、PostgreSQL custom-format dump、Headscale 状态卷和生成配置保存到权限为 `0700` 的 `docker/backups/<UTC时间>/`，随后仅重建有变化的容器。它不会执行 `docker compose down`、不会删除 PostgreSQL/Headscale 数据卷，也不会自动覆盖数据库进行回退。
 
-更新前必须把 `.env` 中的 `AE_VERSION`、`BACKEND_VERSION`、`NGINX_VERSION` 固定到明确标签，并确认 Headscale 与两个 ScaleForge 后端挂载同一个 `scaleforge_internal_auth_key`。迁移默认等待数据库锁 15 秒、单条语句最多 5 分钟；需要调整时设置 `SCALEFORGE_MIGRATION_LOCK_TIMEOUT_MS` 和 `SCALEFORGE_MIGRATION_STATEMENT_TIMEOUT_MS`。
+更新前必须把 `.env` 中的 `AE_VERSION`、`BACKEND_VERSION`、`NGINX_VERSION` 固定到明确标签，并确认 Headscale 与两个 ScaleForge 后端挂载同一个 `scaleforge_internal_auth_key`。迁移默认等待数据库锁 15 秒、单条语句最多 5 分钟；需要调整时设置 `SCALEFORGE_MIGRATION_LOCK_TIMEOUT_MS` 和 `SCALEFORGE_MIGRATION_STATEMENT_TIMEOUT_MS`。从旧的“节点即用户”模型升级时，`005_account_user_groups.sql` 需要重写历史流量归属；若 `flow_summaries` 已超过 100 万行，建议只在该次升级命令前临时设置 `SCALEFORGE_MIGRATION_STATEMENT_TIMEOUT_MS=1800000`，迁移完成后继续使用默认值。
 
 完整的构建、升级、断线处置和回退边界见 [`docker/ACCOUNT_UPGRADE.md`](docker/ACCOUNT_UPGRADE.md)。不要执行 `docker compose down -v`，该命令会删除数据库和 Headscale 状态卷。
 
