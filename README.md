@@ -173,7 +173,11 @@ cd ScaleForge/docker
 cp .env.example .env
 cp secrets/scaleforge_bootstrap_password.example secrets/scaleforge_bootstrap_password
 openssl rand -hex 32 > secrets/scaleforge_internal_auth_key
-chmod 600 .env secrets/scaleforge_bootstrap_password secrets/scaleforge_internal_auth_key
+chmod 600 .env
+chown 0:10102 secrets/scaleforge_bootstrap_password
+chmod 640 secrets/scaleforge_bootstrap_password
+chown 0:10101 secrets/scaleforge_internal_auth_key
+chmod 640 secrets/scaleforge_internal_auth_key
 ```
 
 2. 编辑 `.env`，至少替换：
@@ -187,6 +191,8 @@ chmod 600 .env secrets/scaleforge_bootstrap_password secrets/scaleforge_internal
 - `AE_VERSION`、`BACKEND_VERSION`、`NGINX_VERSION`：生产环境应固定到明确镜像标签，不长期使用 `latest`。
 
 将初始管理员密码写入 `secrets/scaleforge_bootstrap_password`。`scaleforge_internal_auth_key` 必须是至少 32 字节的独立随机值，两个 secret 都不能写入 README、`.env.example`、Compose、镜像或命令历史。
+
+Compose 以宿主机文件绑定方式挂载 secret，因此权限会原样进入容器。固定 GID `10102` 供 Headscale 读取 bootstrap secret，固定 GID `10101` 供 Headscale 与 ScaleForge 共同读取内部认证密钥；不要把这两个文件改回 `root:root 0600`。
 
 3. 检查并启动：
 

@@ -265,6 +265,29 @@ class MigrationAndLogContractTests(unittest.TestCase):
         self.assertIn("ALTER SEQUENCE %s OWNER TO %I", bootstrap)
         self.assertIn("ALTER FUNCTION %s OWNER TO %I", bootstrap)
 
+    def test_deployment_secrets_are_group_readable_by_runtime_users(self):
+        manager = (
+            Path(__file__).resolve().parents[1]
+            / "docker"
+            / "manage-account-stack.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "chown 0:10102 secrets/scaleforge_bootstrap_password",
+            manager,
+        )
+        self.assertIn(
+            "chmod 0640 secrets/scaleforge_bootstrap_password",
+            manager,
+        )
+        self.assertIn(
+            "chown 0:10101 secrets/scaleforge_internal_auth_key",
+            manager,
+        )
+        self.assertIn(
+            "chmod 0640 secrets/scaleforge_internal_auth_key",
+            manager,
+        )
+
     def test_legacy_policy_id_is_backfilled_before_column_drop(self):
         migration = (
             Path(__file__).resolve().parents[1] / "migrations" / "001_platform_schema.sql"

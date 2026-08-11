@@ -29,6 +29,16 @@ require_file() {
   [ -f "$1" ] || fail "missing required file: $1"
 }
 
+secure_deployment_files() {
+  chmod 0600 .env
+  chown 0:10102 secrets/scaleforge_bootstrap_password || \
+    fail "run as root so the Headscale secret group can be assigned"
+  chmod 0640 secrets/scaleforge_bootstrap_password
+  chown 0:10101 secrets/scaleforge_internal_auth_key || \
+    fail "run as root so the ScaleForge secret group can be assigned"
+  chmod 0640 secrets/scaleforge_internal_auth_key
+}
+
 preflight() {
   command -v docker >/dev/null 2>&1 || fail "docker is not installed"
   docker info >/dev/null 2>&1 || fail "docker daemon is not available"
@@ -51,7 +61,7 @@ preflight() {
     [ "$version" != "latest" ] || fail "$variable must not use latest"
   done
 
-  chmod 0600 .env secrets/scaleforge_bootstrap_password secrets/scaleforge_internal_auth_key
+  secure_deployment_files
   compose config --quiet
   echo "Preflight passed for $control_url"
 }

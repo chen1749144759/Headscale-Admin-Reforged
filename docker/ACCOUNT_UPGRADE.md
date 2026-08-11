@@ -8,6 +8,7 @@
 - `.env` 中 `AE_VERSION`、`BACKEND_VERSION`、`NGINX_VERSION` 必须固定为明确标签，不能使用 `latest`。
 - `secrets/scaleforge_bootstrap_password` 必须非空。
 - `secrets/scaleforge_internal_auth_key` 必须是至少 32 字节的独立随机值。
+- 升级脚本必须以 root 运行；它会把 bootstrap secret 设为 `root:10102 0640`，内部认证密钥设为 `root:10101 0640`，确保降权后的容器用户可读但其他用户不可读。
 - 远端服务器需要 Docker Engine 和 Docker Compose v2。
 
 ScaleTail 客户端密码不会经过 ScaleForge。客户端先与 Headscale 建立 Noise 加密通道，再在该通道内提交账户证明，因此使用 HTTP 控制地址时密码也不会作为明文 HTTP 正文发送。HTTP 首次连接采用 TOFU 固定 Headscale Noise 公钥，后续公钥变化会直接阻断连接；首次连接应在可信网络完成或独立核对公钥指纹。HTTPS 能额外提供证书身份校验，仍然推荐，但不是客户端账户登录的必要条件。
