@@ -36,8 +36,59 @@ SELECT format('CREATE ROLE %I NOLOGIN', :'sf_owner')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=:'sf_owner') \gexec
 SELECT format('ALTER ROLE %I NOLOGIN', :'sf_owner') \gexec
 
-SELECT format('REASSIGN OWNED BY %I TO %I', :'admin_user', :'hs_user')
-WHERE :'admin_user' <> :'hs_user' \gexec
+-- The bootstrap superuser can own PostgreSQL system objects that cannot be
+-- reassigned. Transfer only application objects in this database instead of
+-- applying a role-wide ownership change.
+SELECT format(
+  CASE c.relkind
+    WHEN 'r' THEN 'ALTER TABLE %s OWNER TO %I'
+    WHEN 'p' THEN 'ALTER TABLE %s OWNER TO %I'
+    WHEN 'v' THEN 'ALTER VIEW %s OWNER TO %I'
+    WHEN 'm' THEN 'ALTER MATERIALIZED VIEW %s OWNER TO %I'
+    WHEN 'f' THEN 'ALTER FOREIGN TABLE %s OWNER TO %I'
+  END,
+  c.oid::regclass,
+  :'hs_user'
+)
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+  AND pg_get_userbyid(c.relowner) = :'admin_user'
+\gexec
+
+-- SERIAL and IDENTITY sequences inherit ownership with their table and reject
+-- a direct owner change. Only independent sequences are handled separately.
+SELECT format('ALTER SEQUENCE %s OWNER TO %I', c.oid::regclass, :'hs_user')
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relkind = 'S'
+  AND pg_get_userbyid(c.relowner) = :'admin_user'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_depend d
+    WHERE d.classid = 'pg_class'::regclass
+      AND d.objid = c.oid
+      AND d.deptype IN ('a', 'i')
+  )
+\gexec
+
+SELECT format(
+  CASE p.prokind
+    WHEN 'p' THEN 'ALTER PROCEDURE %s OWNER TO %I'
+    ELSE 'ALTER FUNCTION %s OWNER TO %I'
+  END,
+  p.oid::regprocedure,
+  :'hs_user'
+)
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.prokind IN ('f', 'p', 'w')
+  AND pg_get_userbyid(p.proowner) = :'admin_user'
+\gexec
+
 SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'hs_user') \gexec
 SELECT format('ALTER SCHEMA public OWNER TO %I', :'hs_user') \gexec
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;

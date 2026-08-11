@@ -252,6 +252,19 @@ class MigrationAndLogContractTests(unittest.TestCase):
             migrate._set_platform_ownership(cur)
         self.assertEqual(cur.calls, [])
 
+    def test_database_bootstrap_transfers_only_application_objects(self):
+        bootstrap = (
+            Path(__file__).resolve().parents[1]
+            / "docker"
+            / "postgres"
+            / "bootstrap.sh"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("REASSIGN OWNED", bootstrap)
+        self.assertIn("n.nspname = 'public'", bootstrap)
+        self.assertIn("ALTER TABLE %s OWNER TO %I", bootstrap)
+        self.assertIn("ALTER SEQUENCE %s OWNER TO %I", bootstrap)
+        self.assertIn("ALTER FUNCTION %s OWNER TO %I", bootstrap)
+
     def test_legacy_policy_id_is_backfilled_before_column_drop(self):
         migration = (
             Path(__file__).resolve().parents[1] / "migrations" / "001_platform_schema.sql"
