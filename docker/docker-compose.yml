@@ -71,7 +71,7 @@ services:
       - "${HS_BIND_IP:-127.0.0.1}:${HS_PORT:-8080}:8080/tcp"
       - "${DERP_BIND_IP:-0.0.0.0}:${DERP_STUN_PORT:-3478}:3478/udp"
     environment:
-      HEADSCALE_SERVER_URL: ${HEADSCALE_SERVER_URL:?Set the trusted HTTPS control URL in docker/.env}
+      HEADSCALE_SERVER_URL: ${HEADSCALE_SERVER_URL:?Set the client-reachable HTTP(S) control origin in docker/.env}
       HEADSCALE_DNS_DOMAIN: ${HEADSCALE_DNS_DOMAIN:-hs.admin.pro}
       HEADSCALE_MAGIC_DNS: ${HEADSCALE_MAGIC_DNS:-true}
       HEADSCALE_DNS_OVERRIDE_LOCAL: ${HEADSCALE_DNS_OVERRIDE_LOCAL:-true}

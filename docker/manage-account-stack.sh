@@ -4,6 +4,7 @@ set -eu
 umask 077
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_dir/origin-url.sh"
 cd "$script_dir"
 
 fail() {
@@ -41,10 +42,8 @@ preflight() {
   [ "$internal_key_bytes" -ge 32 ] || fail "internal authentication key must contain at least 32 bytes"
 
   control_url=$(env_value HEADSCALE_SERVER_URL)
-  case "$control_url" in
-    https://*) ;;
-    *) fail "HEADSCALE_SERVER_URL must be a trusted HTTPS URL" ;;
-  esac
+  is_http_origin "$control_url" || \
+    fail "HEADSCALE_SERVER_URL must be an origin-only http:// or https:// URL"
 
   for variable in AE_VERSION BACKEND_VERSION NGINX_VERSION; do
     version=$(env_value "$variable")
@@ -164,7 +163,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage: ./manage-account-stack.sh preflight|backup|upgrade|verify|status
 
-  preflight  Validate Docker, HTTPS, pinned image tags and secrets.
+  preflight  Validate Docker, the HTTP(S) control origin, pinned image tags and secrets.
   backup     Back up PostgreSQL, .env, image references and deployment secrets.
   upgrade    Pull images, back up data, recreate changed services and verify them.
   verify     Wait for service health and verify migrations/account schema.

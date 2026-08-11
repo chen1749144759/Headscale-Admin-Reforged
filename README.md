@@ -35,7 +35,7 @@ ScaleForge 不是控制面代理，也不保存能代替用户登录的长期 He
                             v
                     Headscale-Admin-AE
 
-ScaleTail --Noise 控制连接--> Headscale-Admin-AE
+ScaleTail --HTTP(S) 承载的 Noise 控制连接--> Headscale-Admin-AE
                                   |
                          已验证节点身份后转发
                                   |
@@ -48,6 +48,8 @@ ScaleTail --Noise 控制连接--> Headscale-Admin-AE
 - Nginx 只挂载 Web API UDS，不接触 Headscale 管理 Socket 或客户端上报 Socket。
 - ScaleForge Public API 只读挂载 Headscale 管理 UDS，通过相对路径调用私有接口，不使用 TCP 管理端口。
 - Client API 不暴露给浏览器或公网。Headscale 完成 Noise 和节点身份校验后，才通过独立 UDS 转发上报、策略和版本请求。
+- ScaleTail 客户端密码不会发送到 ScaleForge。客户端先与 Headscale 建立 Noise 加密通道，再在该通道内提交账户证明；外层控制地址使用 HTTP 时，密码仍不会以明文出现在 HTTP 正文中。
+- HTTP 首次连接采用 TOFU：ScaleTail 固定首次观察到的 Headscale Noise 公钥，后续公钥变化会阻断连接并要求人工确认。首次连接仍应在可信网络中完成或独立核对公钥指纹；HTTPS 可额外提供 PKI 身份校验，仍然推荐，但不是 Noise 账户登录的必要条件。
 - Headscale 与两个 ScaleForge API 的双向 UDS 请求还必须通过共享 HMAC 密钥校验；签名绑定方法、路径、查询、正文摘要、时间戳、随机 nonce、授权头和节点/用户上下文，并拒绝超时与重放。
 - 浏览器只持有 Headscale 生成的 opaque session Cookie；Cookie 使用 `Secure`、`HttpOnly`、`SameSite=Strict`。
 - Headscale 与 ScaleForge 使用不同 PostgreSQL 运行角色；高权限数据库账户只用于 bootstrap 和迁移。
@@ -64,7 +66,7 @@ ScaleTail --Noise 控制连接--> Headscale-Admin-AE
 - 修改密码不能复用当前密码和最近四个历史密码；更新会撤销旧管理会话，并要求节点在新的控制会话中重新完成账户证明。
 - 密码自最后修改起 90 天有效。到期后 Web 会话只允许修改密码或退出，客户端新会话、上报与策略领取也会被拒绝，直至密码更新。
 - ScaleTail Linux 交互登录使用 `--username` 并在终端内隐藏读取密码；自动化使用权限为 `0600` 的 `--password-file`。密码不能放进命令行、环境变量、镜像层或 Git。
-- ScaleTail 在新的控制会话内向 Headscale 证明账户密码；设备密钥只负责协议加密和节点身份，不形成第二套用户可维护的认证体系。
+- ScaleTail 在新的 Noise 控制会话内直接向 Headscale 证明账户密码，密码不经过 ScaleForge；设备密钥只负责协议加密和节点身份，不形成第二套用户可维护的认证体系。
 
 示例：
 
@@ -161,7 +163,7 @@ Compose 启动顺序为 PostgreSQL -> 数据库角色 bootstrap -> Headscale -> 
 
 ## 部署
 
-推荐使用 Linux、Docker Engine 和 Docker Compose v2。生产环境必须为管理站点和 Headscale 控制地址配置可信 HTTPS 反向代理。
+推荐使用 Linux、Docker Engine 和 Docker Compose v2。管理站点仍推荐配置可信 HTTPS；Headscale 控制地址可使用 origin-only 的 `http://` 或 `https://`，HTTP 部署依赖 Noise 加密与 ScaleTail TOFU 公钥固定。
 
 1. 准备配置和初始管理员密码：
 
@@ -176,7 +178,7 @@ chmod 600 .env secrets/scaleforge_bootstrap_password secrets/scaleforge_internal
 
 2. 编辑 `.env`，至少替换：
 
-- `HEADSCALE_SERVER_URL`：客户端可达的可信 HTTPS 控制地址。
+- `HEADSCALE_SERVER_URL`：客户端可达的 origin-only HTTP(S) 控制地址，例如 `http://211.137.214.34:60090` 或 `https://headscale.example.com`；不能包含用户信息、路径、查询参数或片段。
 - `TRUSTED_ORIGINS`：管理端完整 HTTPS origin；多个值用英文逗号分隔。
 - `HEADSCALE_TRUSTED_PROXY_CIDRS`：仅填写真实反向代理所在的最小 CIDR；不在列表内的来源不能提供客户端 IP 头。
 - `DERP_DOMAIN`：内嵌 DERP 使用的域名。

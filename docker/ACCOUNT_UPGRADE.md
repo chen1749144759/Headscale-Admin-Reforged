@@ -4,11 +4,13 @@
 
 ## 前置条件
 
-- `HEADSCALE_SERVER_URL` 必须是客户端可达且证书受信任的 HTTPS 地址。远程 HTTP 控制地址会被新客户端拒绝。
+- `HEADSCALE_SERVER_URL` 必须是客户端可达、仅包含 scheme/host/可选端口的 `http://` 或 `https://` origin；禁止用户信息、路径、查询参数和片段。
 - `.env` 中 `AE_VERSION`、`BACKEND_VERSION`、`NGINX_VERSION` 必须固定为明确标签，不能使用 `latest`。
 - `secrets/scaleforge_bootstrap_password` 必须非空。
 - `secrets/scaleforge_internal_auth_key` 必须是至少 32 字节的独立随机值。
 - 远端服务器需要 Docker Engine 和 Docker Compose v2。
+
+ScaleTail 客户端密码不会经过 ScaleForge。客户端先与 Headscale 建立 Noise 加密通道，再在该通道内提交账户证明，因此使用 HTTP 控制地址时密码也不会作为明文 HTTP 正文发送。HTTP 首次连接采用 TOFU 固定 Headscale Noise 公钥，后续公钥变化会直接阻断连接；首次连接应在可信网络完成或独立核对公钥指纹。HTTPS 能额外提供证书身份校验，仍然推荐，但不是客户端账户登录的必要条件。
 
 ## 本地构建
 
