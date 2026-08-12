@@ -217,6 +217,7 @@ class MigrationAndLogContractTests(unittest.TestCase):
             "expires_at",
             "must_change_password",
             "password_changed_at",
+            "deleted_at",
         }
         self.assertNotIn("accounts", migrate.CORE_READ_TABLES)
         self.assertEqual(set(migrate.ACCOUNT_READ_COLUMNS), expected_columns)

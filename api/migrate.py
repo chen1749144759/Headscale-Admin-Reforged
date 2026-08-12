@@ -23,6 +23,7 @@ ACCOUNT_READ_COLUMNS = (
     "expires_at",
     "must_change_password",
     "password_changed_at",
+    "deleted_at",
 )
 PLATFORM_TABLES = (
     "acl",
