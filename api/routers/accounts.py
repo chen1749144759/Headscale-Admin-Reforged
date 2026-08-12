@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from .dependencies import CurrentUser, require_manager
 from .headscale_client import HeadscaleUnavailable, request as headscale_request, response_error
+from .acl import refresh_acl_business_groups
 
 
 router = APIRouter(prefix="/api/accounts", tags=["用户"])
@@ -95,6 +96,7 @@ def create_account(req: AccountCreateReq, user: CurrentUser = Depends(require_ma
         expected=(201,),
     )
     account = response.json()
+    refresh_acl_business_groups(user)
     return {"code": 0, "msg": "账户已创建", "data": account}
 
 
@@ -125,6 +127,7 @@ def update_account(
         data=payload,
     )
     account = response.json()
+    refresh_acl_business_groups(user)
     return {"code": 0, "msg": "账户已更新", "data": account}
 
 

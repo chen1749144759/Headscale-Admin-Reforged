@@ -2,6 +2,7 @@ import base64
 import inspect
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -15,7 +16,14 @@ from starlette.responses import Response
 from api.routers import headscale_client
 from api.routers import dependencies as deps
 from api import migrate
-from api.routers.acl import _parse_policy, _reject_identity_tags
+from api.routers.acl import (
+    _account_is_active,
+    _load_business_groups,
+    _parse_policy,
+    _reject_identity_tags,
+    transform_acl_for_headscale,
+    transform_acl_from_headscale,
+)
 from api.routers.accounts import AccountCreateReq
 from api.routers.client_reports import (
     PolicyStateReport,
@@ -649,6 +657,190 @@ class AuthenticationBoundaryTests(unittest.TestCase):
 
 
 class AclIdentityTests(unittest.TestCase):
+    def test_private_group_contract_maps_real_network_identities(self):
+        user = SimpleNamespace(session_token="manager-session")
+        responses = {
+            "/v1/groups": {"code": 0, "data": [{"id": 2, "name": "RD"}]},
+            "/v1/accounts": {
+                "code": 0,
+                "data": [
+                    {
+                        "id": 3,
+                        "groupId": 2,
+                        "networkName": "account-chenzs",
+                        "role": "user",
+                        "enabled": True,
+                    },
+                    {
+                        "id": 4,
+                        "groupId": 2,
+                        "networkName": "disabled-user",
+                        "role": "user",
+                        "enabled": False,
+                    },
+                ],
+            },
+        }
+
+        with patch("api.routers.acl.hs_request", side_effect=lambda method, path, **kwargs: responses[path]):
+            groups = _load_business_groups(user)
+
+        self.assertEqual(groups, [{
+            "id": 2,
+            "name": "RD",
+            "managed_account_exists": True,
+            "members": ["account-chenzs"],
+        }])
+
+    def test_business_group_compiles_to_current_headscale_users(self):
+        groups = [{
+            "id": 2,
+            "name": "RD",
+            "managed_account_exists": True,
+            "members": ["RD", "account-chenzs"],
+        }]
+        source = '{"acls":[{"action":"accept","src":["RD"],"dst":["RD:*","10.0.0.0/8:*"]}]}'
+
+        compiled = _parse_policy(transform_acl_for_headscale(source, groups))
+
+        self.assertEqual(compiled["groups"]["group:scaleforge-2"], ["RD@", "account-chenzs@"])
+        self.assertEqual(compiled["acls"][0]["src"], ["group:scaleforge-2"])
+        self.assertEqual(
+            compiled["acls"][0]["dst"],
+            ["group:scaleforge-2:*", "10.0.0.0/8:*"],
+        )
+
+    def test_managed_group_round_trips_to_business_alias(self):
+        groups = [{
+            "id": 2,
+            "name": "RD",
+            "managed_account_exists": True,
+            "members": ["RD", "account-chenzs"],
+        }]
+        source = '{"acls":[{"action":"accept","src":["RD"],"dst":["RD:*"]}]}'
+
+        restored = _parse_policy(
+            transform_acl_from_headscale(transform_acl_for_headscale(source, groups), groups)
+        )
+
+        self.assertNotIn("groups", restored)
+        self.assertEqual(restored["acls"][0]["src"], ["RD"])
+        self.assertEqual(restored["acls"][0]["dst"], ["RD:*"])
+
+    def test_disabled_group_can_compile_to_empty_fail_closed_membership(self):
+        groups = [{
+            "id": 9,
+            "name": "Disabled",
+            "managed_account_exists": True,
+            "members": [],
+        }]
+        source = '{"acls":[{"action":"accept","src":["Disabled"],"dst":["Disabled:*"]}]}'
+
+        compiled = _parse_policy(transform_acl_for_headscale(source, groups))
+
+        self.assertEqual(compiled["groups"]["group:scaleforge-9"], [])
+
+    def test_legacy_headscale_user_is_not_replaced_by_empty_seeded_group(self):
+        groups = [{
+            "id": 6,
+            "name": "SH-subnet",
+            "managed_account_exists": False,
+            "members": [],
+        }]
+        source = '{"acls":[{"action":"accept","src":["RD"],"dst":["SH-subnet:*"]}]}'
+
+        compiled = _parse_policy(transform_acl_for_headscale(source, groups))
+
+        self.assertNotIn("groups", compiled)
+        self.assertEqual(compiled["acls"][0]["dst"], ["SH-subnet@:*"])
+
+    def test_internal_managed_group_name_is_reserved(self):
+        policy = _parse_policy(
+            '{"groups":{"group:scaleforge-2":["alice"]},'
+            '"acls":[{"action":"accept","src":["group:scaleforge-2"],"dst":["*:*"]}]}'
+        )
+        with self.assertRaises(HTTPException) as raised:
+            _reject_identity_tags(policy)
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_internal_managed_group_name_is_reserved_in_grants(self):
+        policy = _parse_policy(
+            '{"grants":[{"src":["group:scaleforge-2"],"dst":["*"],'
+            '"ip":["tcp:22"]}]}'
+        )
+        with self.assertRaises(HTTPException) as raised:
+            _reject_identity_tags(policy)
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_business_group_compiles_in_auto_approvers(self):
+        groups = [{
+            "id": 2,
+            "name": "RD",
+            "managed_account_exists": True,
+            "members": ["RD", "account-chenzs"],
+        }]
+        source = (
+            '{"acls":[],"autoApprovers":{"routes":{"10.0.0.0/8":["RD"]},'
+            '"exitNode":["RD"]}}'
+        )
+
+        compiled_text = transform_acl_for_headscale(source, groups)
+        compiled = _parse_policy(compiled_text)
+        restored = _parse_policy(transform_acl_from_headscale(compiled_text, groups))
+
+        self.assertEqual(compiled["autoApprovers"]["routes"]["10.0.0.0/8"], ["group:scaleforge-2"])
+        self.assertEqual(compiled["autoApprovers"]["exitNode"], ["group:scaleforge-2"])
+        self.assertEqual(restored["autoApprovers"]["routes"]["10.0.0.0/8"], ["RD"])
+        self.assertEqual(restored["autoApprovers"]["exitNode"], ["RD"])
+
+    def test_business_group_compiles_in_grants_and_ssh_sources(self):
+        groups = [{
+            "id": 2,
+            "name": "RD",
+            "managed_account_exists": True,
+            "members": ["RD", "account-chenzs"],
+        }]
+        source = (
+            '{"grants":[{"src":["RD"],"dst":["RD"],"ip":["tcp:22"]}],'
+            '"ssh":[{"action":"accept","src":["RD"],"dst":["server"],'
+            '"users":["root"]}]}'
+        )
+
+        compiled_text = transform_acl_for_headscale(source, groups)
+        compiled = _parse_policy(compiled_text)
+        restored = _parse_policy(transform_acl_from_headscale(compiled_text, groups))
+
+        self.assertEqual(compiled["grants"][0]["src"], ["group:scaleforge-2"])
+        self.assertEqual(compiled["grants"][0]["dst"], ["group:scaleforge-2"])
+        self.assertEqual(compiled["ssh"][0]["src"], ["group:scaleforge-2"])
+        self.assertEqual(compiled["ssh"][0]["dst"], ["server@"])
+        self.assertEqual(restored["grants"][0]["src"], ["RD"])
+        self.assertEqual(restored["ssh"][0]["src"], ["RD"])
+        self.assertEqual(restored["ssh"][0]["dst"], ["server"])
+
+    def test_account_membership_excludes_disabled_expired_and_invalid_accounts(self):
+        now = datetime(2026, 8, 12, tzinfo=timezone.utc)
+        self.assertTrue(_account_is_active({
+            "enabled": True,
+            "role": "user",
+            "expiresAt": "2026-08-13T00:00:00Z",
+        }, now))
+        self.assertFalse(_account_is_active({
+            "enabled": False,
+            "role": "user",
+            "expiresAt": None,
+        }, now))
+        self.assertFalse(_account_is_active({
+            "enabled": True,
+            "role": "user",
+            "expiresAt": "2026-08-11T00:00:00Z",
+        }, now))
+        self.assertFalse(_account_is_active({
+            "enabled": True,
+            "role": "user",
+            "expiresAt": "invalid",
+        }, now))
+
     def test_account_policy_rejects_tag_owners(self):
         policy = _parse_policy('{"tagOwners": {"tag:server": ["group:ops"]}}')
         with self.assertRaises(HTTPException) as raised:
