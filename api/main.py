@@ -1,6 +1,8 @@
 # Headscale Admin - FastAPI Backend
 # 纯 JSON API 后端服务，前后端分离模式
 
+import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -32,14 +34,36 @@ from api.routers.dependencies import (
     load_config,
 )
 from api.routers.headscale_client import close_client
+from api.routers.traffic import run_scheduled_traffic_maintenance
 from api.routers.utils import check_headscale_health
 load_config()
+
+logger = logging.getLogger(__name__)
+
+
+async def _traffic_maintenance_loop():
+    while True:
+        try:
+            await asyncio.to_thread(run_scheduled_traffic_maintenance)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("scheduled traffic maintenance failed")
+        await asyncio.sleep(3600)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    yield
-    close_client()
+    maintenance_task = asyncio.create_task(_traffic_maintenance_loop())
+    try:
+        yield
+    finally:
+        maintenance_task.cancel()
+        try:
+            await maintenance_task
+        except asyncio.CancelledError:
+            pass
+        close_client()
 
 # ─── FastAPI 应用 ─────────────────────────────────────
 api_docs_enabled = os.environ.get('ENABLE_API_DOCS', 'false').strip().lower() in ('1', 'true', 'yes', 'on')

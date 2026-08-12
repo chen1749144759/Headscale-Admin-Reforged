@@ -359,6 +359,12 @@ class MigrationAndLogContractTests(unittest.TestCase):
         summary_body = traffic_router.split("def traffic_summary", 1)[1].split("@router.post('/maintenance')", 1)[0]
         self.assertNotIn("_run_traffic_maintenance", summary_body)
 
+    def test_traffic_maintenance_runs_in_background(self):
+        root = Path(__file__).resolve().parents[1]
+        main_source = (root / "api" / "main.py").read_text(encoding="utf-8")
+        self.assertIn("asyncio.to_thread(run_scheduled_traffic_maintenance)", main_source)
+        self.assertIn("await asyncio.sleep(3600)", main_source)
+
     def test_ota_v3_migration_is_incremental_and_disables_legacy_signatures(self):
         migration = (
             Path(__file__).resolve().parents[1]

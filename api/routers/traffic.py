@@ -234,6 +234,15 @@ def _run_traffic_maintenance(conn, force: bool = False) -> dict:
     }
 
 
+def run_scheduled_traffic_maintenance() -> dict:
+    """Run retention and rollups outside latency-sensitive API requests."""
+    conn = get_db_conn()
+    try:
+        return _run_traffic_maintenance(conn, force=True)
+    finally:
+        conn.close()
+
+
 @router.get('/summary')
 def traffic_summary(user: CurrentUser = Depends(get_current_user)):
     """获取流量总览"""
