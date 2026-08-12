@@ -12,6 +12,9 @@ const request = axios.create({
 function errorDetail(error) {
   const endpoint = error.config?.url || '未知接口'
   if (!error.response) {
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return { code: 'request_timeout', message: `请求超时：${endpoint}` }
+    }
     return { code: 'network_error', message: `无法连接管理服务：${endpoint}` }
   }
   const detail = error.response?.data?.detail

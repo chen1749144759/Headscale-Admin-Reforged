@@ -239,7 +239,6 @@ def traffic_summary(user: CurrentUser = Depends(get_current_user)):
     """获取流量总览"""
     conn = get_db_conn()
     try:
-        _run_traffic_maintenance(conn)
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         sample_scope_sql, sample_scope_params = _account_scope(user, "ts")
         cur.execute(f"""

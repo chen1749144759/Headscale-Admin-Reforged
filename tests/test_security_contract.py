@@ -345,6 +345,20 @@ class MigrationAndLogContractTests(unittest.TestCase):
         self.assertIn("flow_summaries_machine_id_fkey", migration)
         self.assertNotIn("fk_log_account", migration)
 
+    def test_recent_flow_queries_have_global_and_account_indexes(self):
+        root = Path(__file__).resolve().parents[1]
+        migration = (root / "migrations" / "006_traffic_query_indexes.sql").read_text(encoding="utf-8")
+        self.assertIn("idx_flow_summaries_window_id", migration)
+        self.assertIn("(window_start DESC, id DESC)", migration)
+        self.assertIn("idx_flow_summaries_machine_window_id", migration)
+        self.assertIn("(machine_id, window_start DESC, id DESC)", migration)
+
+    def test_traffic_summary_does_not_run_maintenance(self):
+        root = Path(__file__).resolve().parents[1]
+        traffic_router = (root / "api" / "routers" / "traffic.py").read_text(encoding="utf-8")
+        summary_body = traffic_router.split("def traffic_summary", 1)[1].split("@router.post('/maintenance')", 1)[0]
+        self.assertNotIn("_run_traffic_maintenance", summary_body)
+
     def test_ota_v3_migration_is_incremental_and_disables_legacy_signatures(self):
         migration = (
             Path(__file__).resolve().parents[1]
