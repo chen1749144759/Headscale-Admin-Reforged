@@ -38,6 +38,15 @@ scaleforge_commit=$(git -C "$repo_dir" rev-parse --short=8 HEAD)
 headscale_commit=$(git -C "$headscale_dir" rev-parse --short=8 HEAD)
 scaleforge_tag="$date_tag-$scaleforge_commit"
 headscale_tag="$date_tag-$headscale_commit"
+headscale_binary_version="${HEADSCALE_BINARY_VERSION:-0.29.2-scaleforge.${date_tag}+${headscale_commit}}"
+
+case "$headscale_binary_version" in
+  [0-9]*.[0-9]*.[0-9]*) ;;
+  *)
+    echo "HEADSCALE_BINARY_VERSION must be a SemVer-compatible version: $headscale_binary_version" >&2
+    exit 1
+    ;;
+esac
 
 backend_image="chenzeshi/scaleforge-backend:$scaleforge_tag"
 nginx_image="chenzeshi/scaleforge-nginx:$scaleforge_tag"
@@ -54,7 +63,7 @@ docker build --pull \
   -t chenzeshi/scaleforge-nginx:latest \
   "$repo_dir"
 docker build --pull \
-  --build-arg "VERSION=$headscale_tag" \
+  --build-arg "VERSION=$headscale_binary_version" \
   -f "$headscale_dir/Dockerfile" \
   -t "$headscale_image" \
   -t chenzeshi/headscale-admin-ae:latest \
