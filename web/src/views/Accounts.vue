@@ -12,7 +12,7 @@
       </div>
 
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:16px">
-        <template #title>每个普通用户只能登录一台客户端；业务分组可以重复选择。新建或重置产生的密码仅用于首次登录，用户必须立即修改。</template>
+        <template #title>每个普通用户只能登录一台客户端；业务分组可以重复选择。新建或重置产生的是一次性初始密码，用户会直接在 ScaleTail 客户端设置自己的新密码，无需登录本平台。</template>
       </el-alert>
 
       <el-table :data="filteredAccounts" v-loading="loading" stripe>
@@ -86,7 +86,7 @@
 
     <el-dialog v-model="resetDialog" title="重置账户密码" width="460px" destroy-on-close>
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
-        <template #title>重置后现有会话和客户端认证立即失效；此处设置的是临时密码，用户下次登录必须修改。</template>
+        <template #title>重置后现有会话和客户端认证立即失效；请把此一次性初始密码发给用户，用户会在 ScaleTail 客户端设置新密码并自动继续连接。</template>
       </el-alert>
       <el-form ref="resetFormRef" :model="resetForm" :rules="resetRules" label-width="100px">
         <el-form-item label="账户">{{ resetTarget?.username }}</el-form-item>
@@ -208,7 +208,7 @@ async function saveAccount() {
         ...(form.expiresAt ? { expiresAt: form.expiresAt.toISOString() } : {}),
       })
     }
-    ElMessage.success(editing.value ? '用户已更新' : '用户已创建，初始密码需由用户首次登录后修改')
+    ElMessage.success(editing.value ? '用户已更新' : '用户已创建，请将一次性初始密码发给用户，用户将在 ScaleTail 客户端设置新密码')
     accountDialog.value = false
     await loadData()
   } finally {
@@ -227,7 +227,7 @@ async function savePassword() {
   saving.value = true
   try {
     await resetUserPassword(resetTarget.value.id, { newPassword: resetForm.password })
-    ElMessage.success('临时密码已重置，用户下次登录必须修改')
+    ElMessage.success('一次性初始密码已重置，请发给用户在 ScaleTail 客户端设置新密码')
     resetDialog.value = false
   } finally {
     saving.value = false
