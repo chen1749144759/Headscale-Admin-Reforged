@@ -12,7 +12,7 @@
       </div>
 
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:16px">
-        <template #title>每个普通用户只能登录一台客户端；业务分组可以重复选择。新建或重置产生的是一次性初始密码，用户会直接在 ScaleTail 客户端设置自己的新密码，无需登录本平台。</template>
+        <template #title>每个普通用户只保留一个网络身份。新建或重置时可生成一次性初始密码，提交成功后仅显示一次；客户端会完成首次换密，Linux 托管节点还会自动轮换到期密码。</template>
       </el-alert>
 
       <el-table :data="filteredAccounts" v-loading="loading" stripe>
@@ -50,11 +50,21 @@
       </el-table>
     </div>
 
-    <el-dialog v-model="accountDialog" :title="editing ? '编辑用户' : '新建用户'" width="520px" destroy-on-close>
+    <el-dialog
+      v-model="accountDialog"
+      :title="editing ? '编辑用户' : '新建用户'"
+      width="520px"
+      destroy-on-close
+      @closed="clearCreatePassword"
+    >
       <el-form ref="accountFormRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="用户名" prop="username"><el-input v-model="form.username" maxlength="255" /></el-form-item>
         <template v-if="!editing">
-          <el-form-item label="初始密码" prop="password"><el-input v-model="form.password" type="password" show-password /></el-form-item>
+          <el-form-item label="初始密码" prop="password">
+            <el-input v-model="form.password" type="password" show-password>
+              <template #append><el-button @click="generateCreatePassword">生成</el-button></template>
+            </el-input>
+          </el-form-item>
           <el-form-item label="确认密码" prop="confirmPassword"><el-input v-model="form.confirmPassword" type="password" show-password /></el-form-item>
         </template>
         <el-form-item label="角色" prop="role">
@@ -84,18 +94,51 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="resetDialog" title="重置账户密码" width="460px" destroy-on-close>
+    <el-dialog
+      v-model="resetDialog"
+      title="重置账户密码"
+      width="460px"
+      destroy-on-close
+      @closed="clearResetPassword"
+    >
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
         <template #title>重置后现有会话和客户端认证立即失效；请把此一次性初始密码发给用户，用户会在 ScaleTail 客户端设置新密码并自动继续连接。</template>
       </el-alert>
       <el-form ref="resetFormRef" :model="resetForm" :rules="resetRules" label-width="100px">
         <el-form-item label="账户">{{ resetTarget?.username }}</el-form-item>
-        <el-form-item label="新密码" prop="password"><el-input v-model="resetForm.password" type="password" show-password /></el-form-item>
+        <el-form-item label="新密码" prop="password">
+          <el-input v-model="resetForm.password" type="password" show-password>
+            <template #append><el-button @click="generateResetPassword">生成</el-button></template>
+          </el-input>
+        </el-form-item>
         <el-form-item label="确认密码" prop="confirmPassword"><el-input v-model="resetForm.confirmPassword" type="password" show-password /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="resetDialog = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="savePassword">确认重置</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="issuedPasswordDialog"
+      title="一次性初始密码"
+      width="500px"
+      :close-on-click-modal="false"
+      @closed="clearIssuedPassword"
+    >
+      <el-alert type="success" :closable="false" show-icon style="margin-bottom:16px">
+        <template #title>密码已生效，仅在本次弹窗中显示。关闭后平台无法再次读取，只能重新重置。</template>
+      </el-alert>
+      <el-form label-width="90px">
+        <el-form-item label="账户"><el-input :model-value="issuedCredential.username" readonly /></el-form-item>
+        <el-form-item label="初始密码">
+          <el-input :model-value="issuedCredential.password" readonly>
+            <template #append><el-button @click="copyIssuedPassword">复制</el-button></template>
+          </el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button type="primary" @click="issuedPasswordDialog = false">我已保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -118,6 +161,8 @@ const accountFormRef = ref(null)
 const resetDialog = ref(false)
 const resetTarget = ref(null)
 const resetFormRef = ref(null)
+const issuedPasswordDialog = ref(false)
+const issuedCredential = reactive({ username: '', password: '' })
 
 const emptyForm = () => ({ username: '', password: '', confirmPassword: '', role: 'user', groupId: null, expiresAt: null, enabled: true })
 const form = reactive(emptyForm())
@@ -169,6 +214,7 @@ function assignForm(values) {
 function openCreate() {
   editing.value = null
   assignForm({})
+  generateCreatePassword()
   accountDialog.value = true
 }
 
@@ -208,8 +254,11 @@ async function saveAccount() {
         ...(form.expiresAt ? { expiresAt: form.expiresAt.toISOString() } : {}),
       })
     }
-    ElMessage.success(editing.value ? '用户已更新' : '用户已创建，请将一次性初始密码发给用户，用户将在 ScaleTail 客户端设置新密码')
+    const createdUsername = form.username.trim()
+    const createdPassword = form.password
+    ElMessage.success(editing.value ? '用户已更新' : '用户已创建')
     accountDialog.value = false
+    if (!editing.value) showIssuedPassword(createdUsername, createdPassword)
     await loadData()
   } finally {
     saving.value = false
@@ -218,7 +267,7 @@ async function saveAccount() {
 
 function openReset(row) {
   resetTarget.value = row
-  Object.assign(resetForm, { password: '', confirmPassword: '' })
+  generateResetPassword()
   resetDialog.value = true
 }
 
@@ -227,10 +276,82 @@ async function savePassword() {
   saving.value = true
   try {
     await resetUserPassword(resetTarget.value.id, { newPassword: resetForm.password })
-    ElMessage.success('一次性初始密码已重置，请发给用户在 ScaleTail 客户端设置新密码')
+    const username = resetTarget.value.username
+    const password = resetForm.password
+    ElMessage.success('一次性初始密码已重置')
     resetDialog.value = false
+    showIssuedPassword(username, password)
   } finally {
     saving.value = false
+  }
+}
+
+function generatePassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789-_'
+  const limit = 256 - (256 % alphabet.length)
+  let password = ''
+  while (password.length < 24) {
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    for (const value of bytes) {
+      if (value >= limit) continue
+      password += alphabet[value % alphabet.length]
+      if (password.length === 24) break
+    }
+  }
+  return password
+}
+
+function generateCreatePassword() {
+  const password = generatePassword()
+  form.password = password
+  form.confirmPassword = password
+}
+
+function generateResetPassword() {
+  const password = generatePassword()
+  resetForm.password = password
+  resetForm.confirmPassword = password
+}
+
+function showIssuedPassword(username, password) {
+  Object.assign(issuedCredential, { username, password })
+  issuedPasswordDialog.value = true
+}
+
+function clearIssuedPassword() {
+  Object.assign(issuedCredential, { username: '', password: '' })
+  clearCreatePassword()
+  clearResetPassword()
+}
+
+function clearCreatePassword() {
+  form.password = ''
+  form.confirmPassword = ''
+}
+
+function clearResetPassword() {
+  Object.assign(resetForm, { password: '', confirmPassword: '' })
+}
+
+async function copyIssuedPassword() {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(issuedCredential.password)
+    } else {
+      const input = document.createElement('textarea')
+      input.value = issuedCredential.password
+      input.style.position = 'fixed'
+      input.style.opacity = '0'
+      document.body.appendChild(input)
+      input.select()
+      const copied = document.execCommand('copy')
+      input.remove()
+      if (!copied) throw new Error('copy failed')
+    }
+    ElMessage.success('初始密码已复制')
+  } catch {
+    ElMessage.error('复制失败，请手动选择密码')
   }
 }
 
